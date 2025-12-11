@@ -1,0 +1,118 @@
+TOPIC
+    about_PsPatchMyPC
+
+SHORT DESCRIPTION
+    Enterprise application patching module with winget integration, progressive
+    deferrals, and orchestrator-agnostic deployment support.
+
+LONG DESCRIPTION
+    PsPatchMyPC is a PowerShell module that provides enterprise-grade application
+    patching capabilities by integrating with the Windows Package Manager (winget).
+    
+    Key features include:
+    
+    * Automatic winget installation and configuration
+    * Progressive deferral system inspired by macadmins Nudge
+    * WPF notification dialogs with countdown timers
+    * BurntToast integration for toast notifications
+    * Dual logging (CMTrace format files + Windows Event Log)
+    * Registry-based state persistence
+    * Scheduled task management (SYSTEM and User contexts)
+    * Enterprise application catalog with per-app configuration
+    * Compliance reporting for Intune, FleetDM, and SCCM
+
+GETTING STARTED
+    # Import the module
+    Import-Module PsPatchMyPC
+    
+    # Initialize winget (auto-installs if needed)
+    Initialize-Winget
+    
+    # Check for available updates
+    Get-PatchStatus
+    
+    # Run a patch cycle
+    Start-PatchCycle -Interactive
+    
+    # Register scheduled tasks
+    Register-PatchSchedule
+
+DEFERRAL SYSTEM
+    PsPatchMyPC implements a Nudge-inspired progressive deferral system:
+    
+    Phase       | Hours to Deadline | Refresh Interval | Deferral Options
+    ------------|-------------------|------------------|------------------
+    Initial     | > 72              | 5 hours          | 1hr, 4hr, Tomorrow, Custom
+    Approaching | 24-72             | 100 minutes      | 1hr, 4hr, Tomorrow
+    Imminent    | 1-24              | 10 minutes       | 1hr, 4hr
+    Elapsed     | < 0 (past due)    | 5 minutes        | 1hr only (aggressive)
+    
+    When a new version is detected, deferral counts reset automatically.
+
+CONFIGURATION
+    Module configuration is stored in:
+    * Module manifest: Default settings
+    * config.psd1: Customizable settings
+    * applications.json: Managed application catalog
+    
+    Environment variables for override:
+    * PSPMPC_LOG_PATH - Custom log directory
+    * PSPMPC_CONFIG_PATH - Custom config location
+    * PSPMPC_EVENT_LOG - Enable/disable Event Log (true/false)
+    * PSPMPC_WINGET_SOURCE - Private winget source URL
+
+ORCHESTRATOR INTEGRATION
+    PsPatchMyPC is designed to work with any orchestrator:
+    
+    Intune:
+        Deploy via Win32 app or Proactive Remediation
+        Detection script: Get-PatchCompliance returns exit 0/1
+        
+    FleetDM:
+        Deploy via Fleet scripts
+        Compliance JSON at C:\ProgramData\FleetDM\patch_status.json
+        
+    SCCM/MECM:
+        Deploy via Task Sequence or Application
+        CMTrace-compatible logs at C:\ProgramData\PsPatchMyPC\Logs
+        
+    Ansible/Chef:
+        Call module functions via PowerShell scripts
+        Export-PatchReport for compliance data
+
+LOGGING
+    Logs are written to two locations:
+    
+    1. CMTrace-compatible files:
+       C:\ProgramData\PsPatchMyPC\Logs\PsPatchMyPC_YYYYMMDD.log
+       
+    2. Windows Event Log:
+       Application and Services Logs > PsPatchMyPC
+       Event IDs: 1000 (Info), 2000 (Warning), 3000 (Error)
+
+EXAMPLES
+    # Check current patch status
+    Get-PatchStatus -ManagedOnly
+    
+    # Run silent patch cycle
+    Start-PatchCycle -NoReboot
+    
+    # Show notification dialog
+    Show-PatchNotification -Type Dialog
+    
+    # Export compliance report
+    Export-PatchReport -Path "C:\Reports\status.json"
+    
+    # Add application to catalog
+    Add-ManagedApplication -Id 'CustomApp.Package' -Name 'Custom App'
+
+SEE ALSO
+    Get-PatchStatus
+    Start-PatchCycle
+    Initialize-Winget
+    Register-PatchSchedule
+    Export-PatchReport
+
+KEYWORDS
+    Patching, Winget, Enterprise, Updates, Intune, FleetDM, SCCM, Notifications
+

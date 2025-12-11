@@ -1,0 +1,194 @@
+{
+  "$schema": "https://raw.githubusercontent.com/thomastysong/PsPatchMyPC/main/schema/applications.json",
+  "version": "1.0.0",
+  "description": "Enterprise application catalog for PsPatchMyPC",
+  "applications": [
+    {
+      "id": "Microsoft.Teams",
+      "name": "Microsoft Teams",
+      "enabled": true,
+      "priority": "High",
+      "conflictingProcesses": ["Teams.exe", "ms-teams.exe"],
+      "preScript": null,
+      "postScript": null,
+      "installArguments": null,
+      "requiresReboot": false,
+      "deferralOverride": {
+        "maxCount": 3,
+        "deadlineDays": 5
+      }
+    },
+    {
+      "id": "Zoom.Zoom",
+      "name": "Zoom",
+      "enabled": true,
+      "priority": "High",
+      "conflictingProcesses": ["Zoom.exe", "ZoomOutlookIMPlugin.exe"],
+      "preScript": null,
+      "postScript": null,
+      "installArguments": null,
+      "requiresReboot": false,
+      "deferralOverride": null
+    },
+    {
+      "id": "SlackTechnologies.Slack",
+      "name": "Slack",
+      "enabled": true,
+      "priority": "Normal",
+      "conflictingProcesses": ["slack.exe"],
+      "preScript": null,
+      "postScript": null,
+      "installArguments": null,
+      "requiresReboot": false,
+      "deferralOverride": null
+    },
+    {
+      "id": "Google.Chrome",
+      "name": "Google Chrome",
+      "enabled": true,
+      "priority": "High",
+      "conflictingProcesses": ["chrome.exe"],
+      "preScript": null,
+      "postScript": "Remove-Item '$env:PUBLIC\\Desktop\\Google Chrome.lnk' -ErrorAction SilentlyContinue",
+      "installArguments": "--silent --system-level",
+      "requiresReboot": false,
+      "deferralOverride": {
+        "maxCount": 3,
+        "deadlineDays": 3
+      }
+    },
+    {
+      "id": "Mozilla.Firefox",
+      "name": "Mozilla Firefox",
+      "enabled": true,
+      "priority": "High",
+      "conflictingProcesses": ["firefox.exe", "firefox-private.exe"],
+      "preScript": null,
+      "postScript": null,
+      "installArguments": null,
+      "requiresReboot": false,
+      "deferralOverride": null
+    },
+    {
+      "id": "Microsoft.Edge",
+      "name": "Microsoft Edge",
+      "enabled": true,
+      "priority": "High",
+      "conflictingProcesses": ["msedge.exe"],
+      "preScript": null,
+      "postScript": null,
+      "installArguments": null,
+      "requiresReboot": false,
+      "deferralOverride": null
+    },
+    {
+      "id": "VideoLAN.VLC",
+      "name": "VLC Media Player",
+      "enabled": true,
+      "priority": "Low",
+      "conflictingProcesses": ["vlc.exe"],
+      "preScript": null,
+      "postScript": null,
+      "installArguments": null,
+      "requiresReboot": false,
+      "deferralOverride": null
+    },
+    {
+      "id": "7zip.7zip",
+      "name": "7-Zip",
+      "enabled": true,
+      "priority": "Low",
+      "conflictingProcesses": ["7zFM.exe", "7zG.exe"],
+      "preScript": null,
+      "postScript": null,
+      "installArguments": null,
+      "requiresReboot": false,
+      "deferralOverride": null
+    },
+    {
+      "id": "Adobe.Acrobat.Reader.64-bit",
+      "name": "Adobe Acrobat Reader DC",
+      "enabled": true,
+      "priority": "Normal",
+      "conflictingProcesses": ["AcroRd32.exe", "Acrobat.exe"],
+      "preScript": null,
+      "postScript": null,
+      "installArguments": null,
+      "requiresReboot": false,
+      "deferralOverride": null
+    },
+    {
+      "id": "Notepad++.Notepad++",
+      "name": "Notepad++",
+      "enabled": true,
+      "priority": "Low",
+      "conflictingProcesses": ["notepad++.exe"],
+      "preScript": null,
+      "postScript": null,
+      "installArguments": null,
+      "requiresReboot": false,
+      "deferralOverride": null
+    },
+    {
+      "id": "Microsoft.VisualStudioCode",
+      "name": "Visual Studio Code",
+      "enabled": true,
+      "priority": "Normal",
+      "conflictingProcesses": ["Code.exe"],
+      "preScript": null,
+      "postScript": null,
+      "installArguments": null,
+      "requiresReboot": false,
+      "deferralOverride": null
+    },
+    {
+      "id": "Microsoft.PowerShell",
+      "name": "PowerShell 7",
+      "enabled": true,
+      "priority": "Normal",
+      "conflictingProcesses": ["pwsh.exe"],
+      "preScript": null,
+      "postScript": null,
+      "installArguments": null,
+      "requiresReboot": false,
+      "deferralOverride": null
+    },
+    {
+      "id": "Git.Git",
+      "name": "Git for Windows",
+      "enabled": true,
+      "priority": "Normal",
+      "conflictingProcesses": ["git.exe", "git-bash.exe"],
+      "preScript": null,
+      "postScript": null,
+      "installArguments": null,
+      "requiresReboot": false,
+      "deferralOverride": null
+    },
+    {
+      "id": "Python.Python.3.12",
+      "name": "Python 3.12",
+      "enabled": false,
+      "priority": "Low",
+      "conflictingProcesses": ["python.exe", "pythonw.exe"],
+      "preScript": null,
+      "postScript": null,
+      "installArguments": null,
+      "requiresReboot": false,
+      "deferralOverride": null
+    },
+    {
+      "id": "KeePassXCTeam.KeePassXC",
+      "name": "KeePassXC",
+      "enabled": true,
+      "priority": "Normal",
+      "conflictingProcesses": ["KeePassXC.exe"],
+      "preScript": null,
+      "postScript": null,
+      "installArguments": null,
+      "requiresReboot": false,
+      "deferralOverride": null
+    }
+  ]
+}
+

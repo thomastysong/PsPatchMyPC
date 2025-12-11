@@ -1,0 +1,41 @@
+# PowerShell module artifacts
+*.dll
+*.pdb
+
+# Build output
+output/
+publish/
+
+# IDE
+.vs/
+.vscode/
+*.suo
+*.user
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Test artifacts
+TestResults/
+coverage/
+*.trx
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+*.tmp
+*.temp
+~$*
+
+# Secrets
+.env
+*.key
+secrets/
+
+# Package management
+packages/
+node_modules/
+
