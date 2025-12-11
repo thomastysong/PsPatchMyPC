@@ -371,7 +371,7 @@ function Remove-ManagedApplication {
         }
         
         $catalog = Get-Content -Path $catalogPath -Raw | ConvertFrom-Json
-        $catalog.applications = @($catalog.applications | Where-Object { $_.id -ne $Id })
+        $catalog.applications = @($catalog.applications | Where-Object { $_.id -ne $Id } | Where-Object { $null -ne $_ })
         
         $catalog | ConvertTo-Json -Depth 10 | Out-File -FilePath $catalogPath -Encoding UTF8 -Force
         
