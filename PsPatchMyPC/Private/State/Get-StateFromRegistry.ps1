@@ -40,6 +40,10 @@ function Get-StateFromRegistry {
             if ($regValues.TargetVersion) {
                 $state.TargetVersion = $regValues.TargetVersion
             }
+            # Ensure TargetVersion is never empty
+            if ([string]::IsNullOrWhiteSpace($state.TargetVersion)) {
+                $state.TargetVersion = 'Latest'
+            }
             
             if ($regValues.DeadlineDate) {
                 $state.DeadlineDate = [datetime]::Parse($regValues.DeadlineDate)
@@ -93,6 +97,11 @@ function Get-StateFromFile {
                 $state.DeferralCount = $stateData.DeferralCount
                 $state.TargetVersion = $stateData.TargetVersion
                 $state.MaxDeferrals = $stateData.MaxDeferrals
+                
+                # Ensure TargetVersion is never empty
+                if ([string]::IsNullOrWhiteSpace($state.TargetVersion)) {
+                    $state.TargetVersion = 'Latest'
+                }
                 
                 if ($stateData.FirstNotification) {
                     $state.FirstNotification = [datetime]::Parse($stateData.FirstNotification)

@@ -72,6 +72,7 @@ class DeferralState {
         $this.DeferralCount = 0
         $this.Phase = [DeferralPhase]::Initial
         $this.MaxDeferrals = 5
+        $this.TargetVersion = 'Latest'  # Default to prevent empty strings
     }
     
     [bool] CanDefer() {

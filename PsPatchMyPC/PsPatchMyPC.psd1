@@ -1,7 +1,7 @@
 @{
     # Module identification
     RootModule        = 'PsPatchMyPC.psm1'
-    ModuleVersion     = '1.0.3'
+    ModuleVersion     = '1.0.4'
     GUID              = 'b8e7c3a1-4f2d-4e9a-8b1c-3d5e7f9a2b4c'
     Author            = 'Thomas Tyson'
     CompanyName       = 'Community'
@@ -80,6 +80,12 @@
             LicenseUri   = 'https://github.com/thomastysong/PsPatchMyPC/blob/main/LICENSE'
             ProjectUri   = 'https://github.com/thomastysong/PsPatchMyPC'
             ReleaseNotes = @'
+## Version 1.0.4
+### Bug Fixes
+- Added defensive validation to prevent empty TargetVersion in DeferralState objects
+- Default TargetVersion to 'Latest' in DeferralState constructor
+- Validate TargetVersion in state loading and initialization functions
+
 ## Version 1.0.3
 ### Bug Fixes
 - Fixed empty AvailableVersion causing Start-PatchCycle to fail

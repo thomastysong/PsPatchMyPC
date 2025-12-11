@@ -128,6 +128,10 @@ function Initialize-DeferralState {
     # New version detected - create new state (reset deferrals per Nudge pattern)
     $state = [DeferralState]::new()
     $state.AppId = $AppId
+    # Ensure TargetVersion is never empty
+    if ([string]::IsNullOrWhiteSpace($TargetVersion)) {
+        $TargetVersion = 'Latest'
+    }
     $state.TargetVersion = $TargetVersion
     $state.FirstNotification = [datetime]::UtcNow
     
