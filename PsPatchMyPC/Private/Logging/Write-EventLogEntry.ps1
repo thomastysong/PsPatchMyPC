@@ -55,24 +55,10 @@ function Write-EventLogEntry {
             }
         }
         
-        # Format message with component
-        $fullMessage = "[$Component] $Message"
+        # Format message with component (prefix with PsPatchMyPC for filtering)
+        $fullMessage = "[PsPatchMyPC][$Component] $Message"
         
-        # Check if source exists, create if needed (requires admin)
-        if (-not [System.Diagnostics.EventLog]::SourceExists($config.EventLogSource)) {
-            try {
-                [System.Diagnostics.EventLog]::CreateEventSource(
-                    $config.EventLogSource,
-                    $config.EventLogName
-                )
-            }
-            catch {
-                # May fail without admin - that's OK, just skip
-                return
-            }
-        }
-        
-        # Write the event
+        # Write the event (WSH source should always exist on Windows)
         [System.Diagnostics.EventLog]::WriteEntry(
             $config.EventLogSource,
             $fullMessage,

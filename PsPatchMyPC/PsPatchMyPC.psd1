@@ -1,7 +1,7 @@
 @{
     # Module identification
     RootModule        = 'PsPatchMyPC.psm1'
-    ModuleVersion     = '1.1.0'
+    ModuleVersion     = '1.1.1'
     GUID              = 'b8e7c3a1-4f2d-4e9a-8b1c-3d5e7f9a2b4c'
     Author            = 'Thomas Tyson'
     CompanyName       = 'Community'
@@ -80,6 +80,13 @@
             LicenseUri   = 'https://github.com/thomastysong/PsPatchMyPC/blob/main/LICENSE'
             ProjectUri   = 'https://github.com/thomastysong/PsPatchMyPC'
             ReleaseNotes = @'
+## Version 1.1.1
+### Improvements
+- Event Viewer logging now uses pre-existing "WSH" (Windows Script Host) source
+- No admin privileges required to write events to Event Viewer
+- Events prefixed with [PsPatchMyPC] for easy filtering
+- Query events: `Get-EventLog -LogName Application -Source WSH | Where-Object { $_.Message -match 'PsPatchMyPC' }`
+
 ## Version 1.1.0
 ### New Features
 - **Install Missing Applications**: Use `-InstallMissing` parameter to install catalog apps that are not yet installed
@@ -154,8 +161,8 @@ Start-PatchCycle -InstallMissing -Force
             LogPath          = 'PsPatchMyPC\Logs'
             StatePath        = 'PsPatchMyPC\State'
             ConfigPath       = 'PsPatchMyPC\Config'
-            EventLogName     = 'PsPatchMyPC'
-            EventLogSource   = 'PsPatchMyPC'
+            EventLogName     = 'Application'
+            EventLogSource   = 'WSH'
             StateRegistryKey = 'HKLM:\SOFTWARE\PsPatchMyPC\State'
         }
     }

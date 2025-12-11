@@ -140,8 +140,8 @@ function Get-ModuleConfiguration {
             LogPath          = $defaultLogPath
             StatePath        = $defaultStatePath
             ConfigPath       = $defaultConfigPath
-            EventLogName     = 'PsPatchMyPC'
-            EventLogSource   = 'PsPatchMyPC'
+            EventLogName     = 'Application'
+            EventLogSource   = 'WSH'  # Use existing Windows Script Host source (no admin required)
             StateRegistryKey = 'HKLM:\SOFTWARE\PsPatchMyPC\State'
         }
         
@@ -170,25 +170,8 @@ function Get-ModuleConfiguration {
             }
         }
         
-        # Initialize Event Log if enabled
-        $enableEventLog = $true
-        if ($env:PSPMPC_EVENT_LOG -eq 'false') {
-            $enableEventLog = $false
-        }
-        
-        if ($enableEventLog) {
-            try {
-                if (-not [System.Diagnostics.EventLog]::SourceExists($Script:ModuleConfig.EventLogSource)) {
-                    [System.Diagnostics.EventLog]::CreateEventSource(
-                        $Script:ModuleConfig.EventLogSource,
-                        $Script:ModuleConfig.EventLogName
-                    )
-                }
-            }
-            catch {
-                # May fail without admin rights - that's OK
-            }
-        }
+        # Event Log uses pre-existing WSH source (no creation needed)
+        # Users can override with $env:PSPMPC_EVENT_LOG = 'false' to disable
     }
     return $Script:ModuleConfig
 }
