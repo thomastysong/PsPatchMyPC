@@ -168,7 +168,11 @@ function Start-PatchCycle {
         
         if ($updates.Count -eq 0 -and $result.TotalUpdates -eq 0) {
             $result.Success = $true
-            $result.Message = "No updates or missing applications to process"
+            if ($InstallMissing) {
+                $result.Message = "No updates available and no missing applications to install"
+            } else {
+                $result.Message = "No updates available (use -InstallMissing to install missing catalog apps)"
+            }
             Write-PatchLog $result.Message -Type Info
             $result.Complete()
             return $result

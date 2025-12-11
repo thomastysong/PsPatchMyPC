@@ -1,7 +1,7 @@
 @{
     # Module identification
     RootModule        = 'PsPatchMyPC.psm1'
-    ModuleVersion     = '1.1.1'
+    ModuleVersion     = '1.1.2'
     GUID              = 'b8e7c3a1-4f2d-4e9a-8b1c-3d5e7f9a2b4c'
     Author            = 'Thomas Tyson'
     CompanyName       = 'Community'
@@ -80,6 +80,11 @@
             LicenseUri   = 'https://github.com/thomastysong/PsPatchMyPC/blob/main/LICENSE'
             ProjectUri   = 'https://github.com/thomastysong/PsPatchMyPC'
             ReleaseNotes = @'
+## Version 1.1.2
+### Bug Fixes
+- Fixed misleading message when `-InstallMissing` not passed
+- Now shows "No updates available (use -InstallMissing to install missing catalog apps)"
+
 ## Version 1.1.1
 ### Improvements
 - Event Viewer logging now uses pre-existing "WSH" (Windows Script Host) source
