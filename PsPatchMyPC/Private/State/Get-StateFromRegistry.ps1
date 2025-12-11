@@ -30,11 +30,11 @@ function Get-StateFromRegistry {
             }
             
             if ($regValues.FirstNotification) {
-                $state.FirstNotification = [datetime]::Parse($regValues.FirstNotification)
+                $state.FirstNotification = ConvertTo-UtcDateTimeInternal -Value $regValues.FirstNotification
             }
             
             if ($regValues.LastDeferral) {
-                $state.LastDeferral = [datetime]::Parse($regValues.LastDeferral)
+                $state.LastDeferral = ConvertTo-UtcDateTimeInternal -Value $regValues.LastDeferral
             }
             
             if ($regValues.TargetVersion) {
@@ -46,7 +46,7 @@ function Get-StateFromRegistry {
             }
             
             if ($regValues.DeadlineDate) {
-                $state.DeadlineDate = [datetime]::Parse($regValues.DeadlineDate)
+                $state.DeadlineDate = ConvertTo-UtcDateTimeInternal -Value $regValues.DeadlineDate
             }
             
             if ($regValues.Phase) {
@@ -67,6 +67,25 @@ function Get-StateFromRegistry {
     # Try file-based state as fallback
     $state = Get-StateFromFile -AppId $AppId
     return $state
+}
+
+function ConvertTo-UtcDateTimeInternal {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string]$Value
+    )
+    try {
+        return [DateTime]::Parse(
+            $Value,
+            [System.Globalization.CultureInfo]::InvariantCulture,
+            [System.Globalization.DateTimeStyles]::RoundtripKind
+        ).ToUniversalTime()
+    }
+    catch {
+        # Last resort: let PowerShell parse it
+        return ([datetime]$Value).ToUniversalTime()
+    }
 }
 
 function Get-StateFromFile {
@@ -104,13 +123,13 @@ function Get-StateFromFile {
                 }
                 
                 if ($stateData.FirstNotification) {
-                    $state.FirstNotification = [datetime]::Parse($stateData.FirstNotification)
+                    $state.FirstNotification = ConvertTo-UtcDateTimeInternal -Value $stateData.FirstNotification
                 }
                 if ($stateData.LastDeferral) {
-                    $state.LastDeferral = [datetime]::Parse($stateData.LastDeferral)
+                    $state.LastDeferral = ConvertTo-UtcDateTimeInternal -Value $stateData.LastDeferral
                 }
                 if ($stateData.DeadlineDate) {
-                    $state.DeadlineDate = [datetime]::Parse($stateData.DeadlineDate)
+                    $state.DeadlineDate = ConvertTo-UtcDateTimeInternal -Value $stateData.DeadlineDate
                 }
                 if ($stateData.Phase) {
                     $state.Phase = [DeferralPhase]$stateData.Phase

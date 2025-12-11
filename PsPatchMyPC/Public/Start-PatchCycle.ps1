@@ -277,7 +277,18 @@ function Export-ComplianceStatus {
             Duration     = $Result.Duration.TotalSeconds
         }
         
-        $status | ConvertTo-Json | Out-File -FilePath $statusPath -Encoding UTF8 -Force
+        try {
+            $status | ConvertTo-Json | Out-File -FilePath $statusPath -Encoding UTF8 -Force
+        }
+        catch {
+            # If ProgramData isn't writable (non-elevated), fall back to TEMP so reporting still works.
+            $fallbackDir = Join-Path $env:TEMP 'PsPatchMyPC\State'
+            if (-not (Test-Path $fallbackDir)) {
+                New-Item -Path $fallbackDir -ItemType Directory -Force | Out-Null
+            }
+            $fallbackPath = Join-Path $fallbackDir 'compliance.json'
+            $status | ConvertTo-Json | Out-File -FilePath $fallbackPath -Encoding UTF8 -Force
+        }
         
         # Also write FleetDM-specific status if configured
         $fleetPath = "C:\ProgramData\FleetDM\patch_status.json"

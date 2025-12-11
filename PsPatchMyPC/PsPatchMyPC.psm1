@@ -88,16 +88,58 @@ foreach ($file in $publicFiles) {
 
 # Initialize module configuration
 $Script:ModuleConfig = $null
+
+function Test-PsPatchMyPCPathWritable {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string]$Path
+    )
+
+    try {
+        if (-not (Test-Path $Path)) {
+            New-Item -Path $Path -ItemType Directory -Force | Out-Null
+        }
+
+        $testFile = Join-Path $Path ("._writetest_{0}.tmp" -f ([guid]::NewGuid().ToString()))
+        Set-Content -Path $testFile -Value 'test' -Encoding Ascii -Force
+        Remove-Item -Path $testFile -Force -ErrorAction SilentlyContinue
+        return $true
+    }
+    catch {
+        return $false
+    }
+}
+
 function Get-ModuleConfiguration {
     if ($null -eq $Script:ModuleConfig) {
         # Initialize with defaults (expand ProgramData path at runtime)
         $programData = $env:ProgramData
         if (-not $programData) { $programData = 'C:\ProgramData' }
+
+        $tempBase = $env:TEMP
+        if (-not $tempBase) { $tempBase = $env:TMP }
+        if (-not $tempBase) { $tempBase = 'C:\Windows\Temp' }
         
+        $defaultLogPath = Join-Path $programData 'PsPatchMyPC\Logs'
+        $defaultStatePath = Join-Path $programData 'PsPatchMyPC\State'
+        $defaultConfigPath = Join-Path $programData 'PsPatchMyPC\Config'
+
+        # If ProgramData is not writable (common when not elevated), fall back to a user-writable temp location.
+        if (-not (Test-PsPatchMyPCPathWritable -Path (Split-Path $defaultLogPath -Parent))) {
+            $defaultLogPath = Join-Path $tempBase 'PsPatchMyPC\Logs'
+        }
+        if (-not (Test-PsPatchMyPCPathWritable -Path (Split-Path $defaultStatePath -Parent))) {
+            $defaultStatePath = Join-Path $tempBase 'PsPatchMyPC\State'
+        }
+        if (-not (Test-PsPatchMyPCPathWritable -Path (Split-Path $defaultConfigPath -Parent))) {
+            $defaultConfigPath = Join-Path $tempBase 'PsPatchMyPC\Config'
+        }
+
         $Script:ModuleConfig = @{
-            LogPath          = Join-Path $programData 'PsPatchMyPC\Logs'
-            StatePath        = Join-Path $programData 'PsPatchMyPC\State'
-            ConfigPath       = Join-Path $programData 'PsPatchMyPC\Config'
+            LogPath          = $defaultLogPath
+            StatePath        = $defaultStatePath
+            ConfigPath       = $defaultConfigPath
             EventLogName     = 'PsPatchMyPC'
             EventLogSource   = 'PsPatchMyPC'
             StateRegistryKey = 'HKLM:\SOFTWARE\PsPatchMyPC\State'
@@ -107,14 +149,24 @@ function Get-ModuleConfiguration {
         if ($env:PSPMPC_LOG_PATH) {
             $Script:ModuleConfig.LogPath = $env:PSPMPC_LOG_PATH
         }
+        if ($env:PSPMPC_STATE_PATH) {
+            $Script:ModuleConfig.StatePath = $env:PSPMPC_STATE_PATH
+        }
         if ($env:PSPMPC_CONFIG_PATH) {
             $Script:ModuleConfig.ConfigPath = $env:PSPMPC_CONFIG_PATH
         }
         
         # Ensure directories exist
         foreach ($path in @($Script:ModuleConfig.LogPath, $Script:ModuleConfig.StatePath, $Script:ModuleConfig.ConfigPath)) {
-            if (-not (Test-Path $path)) {
-                New-Item -Path $path -ItemType Directory -Force | Out-Null
+            if (-not (Test-PsPatchMyPCPathWritable -Path $path)) {
+                # As a final fallback, move to temp (best effort). This prevents "deferrals never expire" scenarios
+                # caused by failing to persist state when running non-elevated.
+                $fallback = Join-Path $tempBase (Split-Path $path -Leaf)
+                $null = Test-PsPatchMyPCPathWritable -Path $fallback
+
+                if ($path -eq $Script:ModuleConfig.LogPath) { $Script:ModuleConfig.LogPath = $fallback }
+                elseif ($path -eq $Script:ModuleConfig.StatePath) { $Script:ModuleConfig.StatePath = $fallback }
+                elseif ($path -eq $Script:ModuleConfig.ConfigPath) { $Script:ModuleConfig.ConfigPath = $fallback }
             }
         }
         

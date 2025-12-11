@@ -165,11 +165,32 @@ function Set-StateToFile {
     
     try {
         $config = Get-ModuleConfiguration
-        $stateDir = $config.StatePath
-        if (-not (Test-Path $stateDir)) {
-            # Try user temp if ProgramData not writable
-            $stateDir = Join-Path $env:TEMP 'PsPatchMyPC\State'
-            New-Item -Path $stateDir -ItemType Directory -Force | Out-Null
+        $candidateDirs = @()
+        if ($config.StatePath) { $candidateDirs += $config.StatePath }
+        if ($env:TEMP) { $candidateDirs += (Join-Path $env:TEMP 'PsPatchMyPC\State') }
+        if ($env:TMP) { $candidateDirs += (Join-Path $env:TMP 'PsPatchMyPC\State') }
+        $candidateDirs = $candidateDirs | Select-Object -Unique
+
+        $stateDir = $null
+        foreach ($dir in $candidateDirs) {
+            try {
+                if (-not (Test-Path $dir)) {
+                    New-Item -Path $dir -ItemType Directory -Force | Out-Null
+                }
+                # Write test
+                $probe = Join-Path $dir ("._probe_{0}.tmp" -f ([guid]::NewGuid().ToString()))
+                Set-Content -Path $probe -Value 'probe' -Encoding Ascii -Force
+                Remove-Item -Path $probe -Force -ErrorAction SilentlyContinue
+                $stateDir = $dir
+                break
+            }
+            catch {
+                continue
+            }
+        }
+
+        if (-not $stateDir) {
+            throw "No writable state directory available (tried: $($candidateDirs -join ', '))"
         }
         
         $stateFile = Join-Path $stateDir "$($State.AppId -replace '[^a-zA-Z0-9]', '_').json"
@@ -188,7 +209,7 @@ function Set-StateToFile {
         $stateData | ConvertTo-Json | Out-File -FilePath $stateFile -Encoding UTF8 -Force
     }
     catch {
-        Write-Verbose "Failed to save state to file: $_"
+        Write-PatchLog "Failed to save state to file for $($State.AppId): $_" -Type Warning -NoEventLog
     }
 }
 
