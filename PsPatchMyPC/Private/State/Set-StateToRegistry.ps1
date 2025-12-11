@@ -105,12 +105,17 @@ function Initialize-DeferralState {
         [Parameter(Mandatory)]
         [string]$AppId,
         
-        [Parameter(Mandatory)]
+        [Parameter()]
         [string]$TargetVersion,
         
         [Parameter()]
         [PsPatchMyPCConfig]$Config
     )
+
+    # Normalize TargetVersion (some winget packages report empty available versions)
+    if ([string]::IsNullOrWhiteSpace($TargetVersion)) {
+        $TargetVersion = 'Latest'
+    }
     
     # Check for existing state
     $existingState = Get-StateFromRegistry -AppId $AppId

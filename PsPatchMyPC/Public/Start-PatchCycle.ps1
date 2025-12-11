@@ -93,7 +93,11 @@ function Start-PatchCycle {
             Write-PatchLog "Processing update for $($update.AppName) ($($update.AppId))" -Type Info
             
             # Get or initialize deferral state
-            $deferralState = Initialize-DeferralState -AppId $update.AppId -TargetVersion $update.AvailableVersion -Config $config
+            $targetVersion = [string]$update.AvailableVersion
+            if ([string]::IsNullOrWhiteSpace($targetVersion)) {
+                $targetVersion = 'Latest'
+            }
+            $deferralState = Initialize-DeferralState -AppId $update.AppId -TargetVersion $targetVersion -Config $config
             
             # Update deferral phase based on time
             $deferralState.Phase = Get-DeferralPhaseInternal -Deadline $deferralState.DeadlineDate -Config $config
