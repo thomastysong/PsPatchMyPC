@@ -1,9 +1,10 @@
 function Get-StateFromRegistry {
     <#
     .SYNOPSIS
-        Gets deferral state from registry
+        Gets deferral state from registry or file fallback
     .DESCRIPTION
-        Retrieves persisted deferral state for an application from the registry
+        Retrieves persisted deferral state for an application from the registry,
+        falling back to file-based state if registry not accessible
     .PARAMETER AppId
         The application ID to get state for
     #>
@@ -19,43 +20,99 @@ function Get-StateFromRegistry {
     $state = [DeferralState]::new()
     $state.AppId = $AppId
     
-    if (-not (Test-Path $appKey)) {
-        return $state
-    }
-    
+    # Try registry first
     try {
-        $regValues = Get-ItemProperty -Path $appKey -ErrorAction SilentlyContinue
-        
-        if ($regValues.DeferralCount) {
-            $state.DeferralCount = [int]$regValues.DeferralCount
-        }
-        
-        if ($regValues.FirstNotification) {
-            $state.FirstNotification = [datetime]::Parse($regValues.FirstNotification)
-        }
-        
-        if ($regValues.LastDeferral) {
-            $state.LastDeferral = [datetime]::Parse($regValues.LastDeferral)
-        }
-        
-        if ($regValues.TargetVersion) {
-            $state.TargetVersion = $regValues.TargetVersion
-        }
-        
-        if ($regValues.DeadlineDate) {
-            $state.DeadlineDate = [datetime]::Parse($regValues.DeadlineDate)
-        }
-        
-        if ($regValues.Phase) {
-            $state.Phase = [DeferralPhase]$regValues.Phase
-        }
-        
-        if ($regValues.MaxDeferrals) {
-            $state.MaxDeferrals = [int]$regValues.MaxDeferrals
+        if (Test-Path $appKey) {
+            $regValues = Get-ItemProperty -Path $appKey -ErrorAction Stop
+            
+            if ($regValues.DeferralCount) {
+                $state.DeferralCount = [int]$regValues.DeferralCount
+            }
+            
+            if ($regValues.FirstNotification) {
+                $state.FirstNotification = [datetime]::Parse($regValues.FirstNotification)
+            }
+            
+            if ($regValues.LastDeferral) {
+                $state.LastDeferral = [datetime]::Parse($regValues.LastDeferral)
+            }
+            
+            if ($regValues.TargetVersion) {
+                $state.TargetVersion = $regValues.TargetVersion
+            }
+            
+            if ($regValues.DeadlineDate) {
+                $state.DeadlineDate = [datetime]::Parse($regValues.DeadlineDate)
+            }
+            
+            if ($regValues.Phase) {
+                $state.Phase = [DeferralPhase]$regValues.Phase
+            }
+            
+            if ($regValues.MaxDeferrals) {
+                $state.MaxDeferrals = [int]$regValues.MaxDeferrals
+            }
+            
+            return $state
         }
     }
     catch {
-        Write-PatchLog "Failed to read state for $AppId : $_" -Type Warning
+        # Registry not accessible - try file fallback
+    }
+    
+    # Try file-based state as fallback
+    $state = Get-StateFromFile -AppId $AppId
+    return $state
+}
+
+function Get-StateFromFile {
+    <#
+    .SYNOPSIS
+        Gets deferral state from file (fallback)
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string]$AppId
+    )
+    
+    $state = [DeferralState]::new()
+    $state.AppId = $AppId
+    
+    # Check multiple locations
+    $stateLocations = @(
+        (Join-Path (Get-ModuleConfiguration).StatePath "$($AppId -replace '[^a-zA-Z0-9]', '_').json")
+        (Join-Path "$env:TEMP\PsPatchMyPC\State" "$($AppId -replace '[^a-zA-Z0-9]', '_').json")
+    )
+    
+    foreach ($stateFile in $stateLocations) {
+        if (Test-Path $stateFile) {
+            try {
+                $stateData = Get-Content -Path $stateFile -Raw | ConvertFrom-Json
+                
+                $state.DeferralCount = $stateData.DeferralCount
+                $state.TargetVersion = $stateData.TargetVersion
+                $state.MaxDeferrals = $stateData.MaxDeferrals
+                
+                if ($stateData.FirstNotification) {
+                    $state.FirstNotification = [datetime]::Parse($stateData.FirstNotification)
+                }
+                if ($stateData.LastDeferral) {
+                    $state.LastDeferral = [datetime]::Parse($stateData.LastDeferral)
+                }
+                if ($stateData.DeadlineDate) {
+                    $state.DeadlineDate = [datetime]::Parse($stateData.DeadlineDate)
+                }
+                if ($stateData.Phase) {
+                    $state.Phase = [DeferralPhase]$stateData.Phase
+                }
+                
+                return $state
+            }
+            catch {
+                # Continue to next location
+            }
+        }
     }
     
     return $state

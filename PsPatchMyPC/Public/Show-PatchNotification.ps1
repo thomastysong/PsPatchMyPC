@@ -273,9 +273,142 @@ function Show-DeferralDialogFull {
     
     $update = $Updates[0]
     $deferralState = Get-StateFromRegistry -AppId $update.AppId
+    $deferralsRemaining = $deferralState.GetRemainingDeferrals()
+    $canDefer = $deferralState.CanDefer()
     
+    # WPF requires STA thread - run in separate runspace if needed
+    $currentThread = [System.Threading.Thread]::CurrentThread
+    if ($currentThread.GetApartmentState() -ne 'STA') {
+        Write-PatchLog "Running dialog in STA runspace..." -Type Info
+        
+        # Create STA runspace for WPF
+        $runspace = [runspacefactory]::CreateRunspace()
+        $runspace.ApartmentState = 'STA'
+        $runspace.ThreadOptions = 'ReuseThread'
+        $runspace.Open()
+        
+        $ps = [powershell]::Create()
+        $ps.Runspace = $runspace
+        
+        $null = $ps.AddScript({
+            param($AppName, $InstalledVersion, $AvailableVersion, $DeferralsRemaining, $CanDefer, $AccentColor, $Timeout)
+            
+            Add-Type -AssemblyName PresentationFramework
+            
+            $xaml = @"
+<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        Title="Update Required" Height="300" Width="500"
+        WindowStyle="None" AllowsTransparency="True" Background="Transparent"
+        Topmost="True" WindowStartupLocation="CenterScreen" ResizeMode="NoResize">
+    <Border CornerRadius="12" Background="#FF2D2D30" BorderBrush="$AccentColor" 
+            BorderThickness="2" Margin="10">
+        <Grid Margin="25">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+            
+            <TextBlock Grid.Row="0" Text="Software Update Required" 
+                      FontSize="20" FontWeight="Bold" Foreground="White"/>
+            
+            <TextBlock Grid.Row="1" Text="$AppName ($InstalledVersion -> $AvailableVersion)"
+                      FontSize="16" Foreground="$AccentColor" Margin="0,15,0,5"/>
+            
+            <TextBlock Grid.Row="2" TextWrapping="Wrap" Foreground="#CCCCCC" FontSize="14" Margin="0,10">
+                A software update is ready to install. Save your work and click Update Now.
+            </TextBlock>
+            
+            <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,10">
+                <TextBlock Text="Auto-installing in: " Foreground="#888888" FontSize="14"/>
+                <TextBlock Name="CountdownText" Text="5:00" Foreground="$AccentColor" FontSize="14" FontWeight="Bold"/>
+            </StackPanel>
+            
+            <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,10,0,0">
+                <Button Name="DeferButton" Content="Defer ($DeferralsRemaining remaining)" Width="160" Height="36" 
+                       Margin="0,0,12,0" Background="#FF3F3F3F" Foreground="White" BorderThickness="0"/>
+                <Button Name="UpdateButton" Content="Update Now" Width="120" Height="36" 
+                       Background="$AccentColor" Foreground="White" BorderThickness="0"/>
+            </StackPanel>
+        </Grid>
+    </Border>
+</Window>
+"@
+            
+            [xml]$xamlXml = $xaml
+            $reader = New-Object System.Xml.XmlNodeReader $xamlXml
+            $window = [Windows.Markup.XamlReader]::Load($reader)
+            
+            $script:dialogResult = 'Timeout'
+            $script:remainingSeconds = $Timeout
+            
+            $countdownText = $window.FindName("CountdownText")
+            $deferButton = $window.FindName("DeferButton")
+            $updateButton = $window.FindName("UpdateButton")
+            
+            if (-not $CanDefer) {
+                $deferButton.IsEnabled = $false
+                $deferButton.Content = "No deferrals left"
+            }
+            
+            $timer = New-Object System.Windows.Threading.DispatcherTimer
+            $timer.Interval = [TimeSpan]::FromSeconds(1)
+            $timer.Add_Tick({
+                $script:remainingSeconds--
+                $mins = [Math]::Floor($script:remainingSeconds / 60)
+                $secs = $script:remainingSeconds % 60
+                $countdownText.Text = "{0}:{1:D2}" -f $mins, $secs
+                
+                if ($script:remainingSeconds -le 0) {
+                    $timer.Stop()
+                    $script:dialogResult = 'Install'
+                    $window.Close()
+                }
+            })
+            
+            $deferButton.Add_Click({
+                $timer.Stop()
+                $script:dialogResult = 'Defer'
+                $window.Close()
+            })
+            
+            $updateButton.Add_Click({
+                $timer.Stop()
+                $script:dialogResult = 'Install'
+                $window.Close()
+            })
+            
+            $window.Add_Loaded({ $timer.Start() })
+            $window.ShowDialog() | Out-Null
+            
+            return $script:dialogResult
+        })
+        
+        $null = $ps.AddArgument($update.AppName)
+        $null = $ps.AddArgument($update.InstalledVersion)
+        $null = $ps.AddArgument($update.AvailableVersion)
+        $null = $ps.AddArgument($deferralsRemaining)
+        $null = $ps.AddArgument($canDefer)
+        $null = $ps.AddArgument($Config.Notifications.AccentColor)
+        $null = $ps.AddArgument($Timeout)
+        
+        try {
+            $result = $ps.Invoke()
+            Write-PatchLog "Deferral dialog result: $($result[0])" -Type Info
+            return $result[0]
+        }
+        finally {
+            $ps.Dispose()
+            $runspace.Close()
+            $runspace.Dispose()
+        }
+    }
+    
+    # Already in STA - run directly
     try {
-        Add-Type -AssemblyName PresentationFramework, System.Windows.Forms -ErrorAction SilentlyContinue
+        Add-Type -AssemblyName PresentationFramework -ErrorAction SilentlyContinue
         
         $message = $Config.Notifications.DialogMessage
         if (-not $message) {
@@ -286,7 +419,7 @@ function Show-DeferralDialogFull {
             -Title $Config.Notifications.DialogTitle `
             -Message $message `
             -AppName "$($update.AppName) ($($update.InstalledVersion) -> $($update.AvailableVersion))" `
-            -DeferralsRemaining $deferralState.GetRemainingDeferrals() `
+            -DeferralsRemaining $deferralsRemaining `
             -AccentColor $Config.Notifications.AccentColor
         
         $window = Show-WPFDialog -Xaml $xaml -Timeout $Timeout
@@ -295,58 +428,54 @@ function Show-DeferralDialogFull {
             return 'Error'
         }
         
-        $result = 'Timeout'
-        $remainingSeconds = $Timeout
+        $script:result = 'Timeout'
+        $script:remainingSeconds = $Timeout
         
-        # Get UI elements
         $countdownText = $window.FindName("CountdownText")
         $deferButton = $window.FindName("DeferButton")
         $updateButton = $window.FindName("UpdateButton")
         
-        # Disable defer button if no deferrals remaining
-        if (-not $deferralState.CanDefer() -and $deferButton) {
+        if (-not $canDefer -and $deferButton) {
             $deferButton.IsEnabled = $false
             $deferButton.Content = "No deferrals remaining"
         }
         
-        # Countdown timer
         $timer = New-Object System.Windows.Threading.DispatcherTimer
         $timer.Interval = [TimeSpan]::FromSeconds(1)
         $timer.Add_Tick({
-            $remainingSeconds--
-            $mins = [Math]::Floor($remainingSeconds / 60)
-            $secs = $remainingSeconds % 60
+            $script:remainingSeconds--
+            $mins = [Math]::Floor($script:remainingSeconds / 60)
+            $secs = $script:remainingSeconds % 60
             $countdownText.Text = "{0}:{1:D2}" -f $mins, $secs
             
-            if ($remainingSeconds -le 0) {
+            if ($script:remainingSeconds -le 0) {
                 $timer.Stop()
-                $result = 'Install'
+                $script:result = 'Install'
                 $window.Close()
             }
-        }.GetNewClosure())
+        })
         
-        # Button handlers
         if ($deferButton) {
             $deferButton.Add_Click({
                 $timer.Stop()
-                $result = 'Defer'
+                $script:result = 'Defer'
                 $window.Close()
-            }.GetNewClosure())
+            })
         }
         
         if ($updateButton) {
             $updateButton.Add_Click({
                 $timer.Stop()
-                $result = 'Install'
+                $script:result = 'Install'
                 $window.Close()
-            }.GetNewClosure())
+            })
         }
         
         $window.Add_Loaded({ $timer.Start() })
         $window.ShowDialog() | Out-Null
         
-        Write-PatchLog "Deferral dialog result: $result" -Type Info
-        return $result
+        Write-PatchLog "Deferral dialog result: $script:result" -Type Info
+        return $script:result
     }
     catch {
         Write-PatchLog "Failed to show deferral dialog: $_" -Type Error

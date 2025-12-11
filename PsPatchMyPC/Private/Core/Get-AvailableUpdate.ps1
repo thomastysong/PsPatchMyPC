@@ -57,7 +57,12 @@ function Get-AvailableUpdate {
             $status.AppId = $pkg.Id
             $status.AppName = $pkg.Name
             $status.InstalledVersion = $pkg.InstalledVersion
-            $status.AvailableVersion = $pkg.AvailableVersion
+            # AvailableVersions is an array, get the first (latest) version
+            $status.AvailableVersion = if ($pkg.AvailableVersions -and $pkg.AvailableVersions.Count -gt 0) { 
+                $pkg.AvailableVersions[0] 
+            } else { 
+                'Latest' 
+            }
             $status.UpdateAvailable = $true
             
             if ($appConfig) {

@@ -1,9 +1,10 @@
 function Set-StateToRegistry {
     <#
     .SYNOPSIS
-        Saves deferral state to registry
+        Saves deferral state to registry or file fallback
     .DESCRIPTION
-        Persists deferral state for an application to the registry
+        Persists deferral state for an application to the registry,
+        falling back to file if registry not accessible
     .PARAMETER State
         The DeferralState object to save
     #>
@@ -19,18 +20,18 @@ function Set-StateToRegistry {
     try {
         # Ensure parent key exists
         if (-not (Test-Path $config.StateRegistryKey)) {
-            New-Item -Path $config.StateRegistryKey -Force | Out-Null
+            New-Item -Path $config.StateRegistryKey -Force -ErrorAction Stop | Out-Null
         }
         
         # Ensure app key exists
         if (-not (Test-Path $appKey)) {
-            New-Item -Path $appKey -Force | Out-Null
+            New-Item -Path $appKey -Force -ErrorAction Stop | Out-Null
         }
         
         # Save state values
-        Set-ItemProperty -Path $appKey -Name 'DeferralCount' -Value $State.DeferralCount
-        Set-ItemProperty -Path $appKey -Name 'Phase' -Value $State.Phase.ToString()
-        Set-ItemProperty -Path $appKey -Name 'MaxDeferrals' -Value $State.MaxDeferrals
+        Set-ItemProperty -Path $appKey -Name 'DeferralCount' -Value $State.DeferralCount -ErrorAction Stop
+        Set-ItemProperty -Path $appKey -Name 'Phase' -Value $State.Phase.ToString() -ErrorAction Stop
+        Set-ItemProperty -Path $appKey -Name 'MaxDeferrals' -Value $State.MaxDeferrals -ErrorAction Stop
         
         if ($State.FirstNotification -ne [datetime]::MinValue) {
             Set-ItemProperty -Path $appKey -Name 'FirstNotification' -Value $State.FirstNotification.ToString('o')
@@ -48,11 +49,12 @@ function Set-StateToRegistry {
             Set-ItemProperty -Path $appKey -Name 'DeadlineDate' -Value $State.DeadlineDate.ToString('o')
         }
         
-        Write-PatchLog "Saved deferral state for $($State.AppId)" -Type Info
+        Write-PatchLog "Saved deferral state for $($State.AppId) to registry" -Type Info
     }
     catch {
-        Write-PatchLog "Failed to save state for $($State.AppId): $_" -Type Error
-        throw
+        # Registry not accessible - use file fallback
+        Write-PatchLog "Registry not accessible, using file fallback for $($State.AppId)" -Type Warning -NoEventLog
+        Set-StateToFile -State $State
     }
 }
 
@@ -133,11 +135,51 @@ function Initialize-DeferralState {
     $state.DeadlineDate = [datetime]::UtcNow.AddDays($Config.Deferrals.DeadlineDays)
     $state.Phase = [DeferralPhase]::Initial
     
-    # Save initial state
+    # Save initial state (Set-StateToRegistry handles fallback internally)
     Set-StateToRegistry -State $state
     
     Write-PatchLog "Initialized deferral state for $AppId (target: $TargetVersion, deadline: $($state.DeadlineDate))" -Type Info
     
     return $state
+}
+
+function Set-StateToFile {
+    <#
+    .SYNOPSIS
+        Saves deferral state to file (fallback when registry not accessible)
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [DeferralState]$State
+    )
+    
+    try {
+        $config = Get-ModuleConfiguration
+        $stateDir = $config.StatePath
+        if (-not (Test-Path $stateDir)) {
+            # Try user temp if ProgramData not writable
+            $stateDir = Join-Path $env:TEMP 'PsPatchMyPC\State'
+            New-Item -Path $stateDir -ItemType Directory -Force | Out-Null
+        }
+        
+        $stateFile = Join-Path $stateDir "$($State.AppId -replace '[^a-zA-Z0-9]', '_').json"
+        
+        $stateData = @{
+            AppId = $State.AppId
+            DeferralCount = $State.DeferralCount
+            FirstNotification = $State.FirstNotification.ToString('o')
+            LastDeferral = $State.LastDeferral.ToString('o')
+            TargetVersion = $State.TargetVersion
+            DeadlineDate = $State.DeadlineDate.ToString('o')
+            Phase = $State.Phase.ToString()
+            MaxDeferrals = $State.MaxDeferrals
+        }
+        
+        $stateData | ConvertTo-Json | Out-File -FilePath $stateFile -Encoding UTF8 -Force
+    }
+    catch {
+        Write-Verbose "Failed to save state to file: $_"
+    }
 }
 

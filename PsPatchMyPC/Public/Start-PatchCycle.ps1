@@ -103,7 +103,7 @@ function Start-PatchCycle {
             if (-not $Force -and $deferralState.CanDefer()) {
                 # In interactive mode, show notification/dialog
                 if ($Interactive) {
-                    $userChoice = Show-DeferralDialogInternal -Update $update -DeferralState $deferralState -Config $config
+                    $userChoice = Show-DeferralDialogFull -Updates @($update) -Config $config -Timeout 60
                     
                     if ($userChoice -eq 'Defer') {
                         # Record deferral

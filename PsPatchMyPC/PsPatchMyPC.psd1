@@ -1,7 +1,7 @@
 @{
     # Module identification
     RootModule        = 'PsPatchMyPC.psm1'
-    ModuleVersion     = '1.0.0'
+    ModuleVersion     = '1.0.1'
     GUID              = 'b8e7c3a1-4f2d-4e9a-8b1c-3d5e7f9a2b4c'
     Author            = 'Thomas Tyson'
     CompanyName       = 'Community'
@@ -80,6 +80,13 @@
             LicenseUri   = 'https://github.com/thomastysong/PsPatchMyPC/blob/main/LICENSE'
             ProjectUri   = 'https://github.com/thomastysong/PsPatchMyPC'
             ReleaseNotes = @'
+## Version 1.0.1
+### Bug Fixes
+- Fixed WPF dialog requiring STA thread - now uses runspace for MTA compatibility
+- Fixed AvailableVersion not populated (uses AvailableVersions array from winget)
+- Fixed registry state fallback to file-based state when not running as admin
+- Fixed interactive mode now properly shows deferral dialog
+
 ## Version 1.0.0
 ### Initial Release
 - Winget integration with auto-installation support

@@ -34,12 +34,17 @@ function Get-InstalledApplication {
             foreach ($pkg in $packages) {
                 if ($Name -and $pkg.Name -notlike "*$Name*") { continue }
                 
+                $availVer = if ($pkg.AvailableVersions -and $pkg.AvailableVersions.Count -gt 0) { 
+                    $pkg.AvailableVersions[0] 
+                } else { 
+                    $null 
+                }
                 $results += [PSCustomObject]@{
                     Source           = 'Winget'
                     AppId            = $pkg.Id
                     Name             = $pkg.Name
                     Version          = $pkg.InstalledVersion
-                    AvailableVersion = $pkg.AvailableVersion
+                    AvailableVersion = $availVer
                     UpdateAvailable  = $pkg.IsUpdateAvailable
                     Publisher        = $pkg.Source
                 }
