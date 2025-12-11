@@ -128,6 +128,11 @@ function Get-ManagedApplicationsInternal {
                     InstallArguments = $appData.installArguments
                     RequiresReboot = $appData.requiresReboot
                     DeferralOverride = $deferralOverride
+                    # New fields for install missing and version pinning
+                    InstallIfMissing = if ($null -ne $appData.installIfMissing) { $appData.installIfMissing } else { $false }
+                    DeferInitialInstall = if ($null -ne $appData.deferInitialInstall) { $appData.deferInitialInstall } else { $false }
+                    VersionPinMode = if ($appData.versionPin) { $appData.versionPin.mode } else { $null }
+                    PinnedVersion = if ($appData.versionPin) { $appData.versionPin.version } else { $null }
                 }
                 $apps += [ManagedApplication]::FromHashtable($ht)
             }

@@ -81,6 +81,39 @@ function Get-AvailableUpdate {
                 if ($appConfig.ConflictingProcesses.Count -gt 0) {
                     $status.ProcessesRunning = Test-ConflictingProcess -ProcessNames $appConfig.ConflictingProcesses
                 }
+                
+                # Apply version pin filtering
+                if ($appConfig.VersionPinMode) {
+                    switch ($appConfig.VersionPinMode) {
+                        'freeze' {
+                            # Skip - don't offer updates for frozen apps
+                            Write-PatchLog "Skipping update for $($pkg.Id) - version is frozen" -Type Info
+                            continue
+                        }
+                        'max' {
+                            # Only offer update if available version <= pinned max
+                            if ($appConfig.PinnedVersion -and $available -ne 'Latest') {
+                                $comparison = Compare-Version -Version1 $available -Version2 $appConfig.PinnedVersion
+                                if ($comparison -gt 0) {
+                                    Write-PatchLog "Skipping update for $($pkg.Id) - available version $available exceeds max pin $($appConfig.PinnedVersion)" -Type Info
+                                    continue
+                                }
+                            }
+                        }
+                        'exact' {
+                            # Only offer update if current version != pinned version
+                            if ($appConfig.PinnedVersion) {
+                                if ($pkg.InstalledVersion -eq $appConfig.PinnedVersion) {
+                                    Write-PatchLog "Skipping update for $($pkg.Id) - already at pinned version $($appConfig.PinnedVersion)" -Type Info
+                                    continue
+                                }
+                                # Set the target version to the pinned version
+                                $available = $appConfig.PinnedVersion
+                                $status.AvailableVersion = $available
+                            }
+                        }
+                    }
+                }
             }
             
             $updates += $status
@@ -120,5 +153,68 @@ function Compare-Version {
         # Fall back to string comparison if not valid versions
         return [string]::Compare($Version1, $Version2, $true)
     }
+}
+
+function Get-MissingApplication {
+    <#
+    .SYNOPSIS
+        Gets applications from the catalog that are not installed
+    .DESCRIPTION
+        Checks which managed applications are missing from the system and returns
+        those that have InstallIfMissing enabled
+    .EXAMPLE
+        Get-MissingApplication
+        Returns all missing applications that should be installed
+    #>
+    [CmdletBinding()]
+    param()
+    
+    $missing = @()
+    
+    if (-not (Test-WingetAvailableInternal)) {
+        Write-PatchLog "Winget not available - cannot check for missing applications" -Type Warning
+        return $missing
+    }
+    
+    try {
+        $managedApps = Get-ManagedApplicationsInternal
+        if ($managedApps.Count -eq 0) {
+            Write-PatchLog "No managed applications configured" -Type Info
+            return $missing
+        }
+        
+        # Get all installed packages
+        $installedPackages = Get-WinGetPackage -ErrorAction SilentlyContinue
+        $installedIds = @()
+        if ($installedPackages) {
+            $installedIds = $installedPackages | ForEach-Object { $_.Id }
+        }
+        
+        foreach ($app in $managedApps) {
+            # Skip disabled apps or those not marked for install
+            if (-not $app.Enabled -or -not $app.InstallIfMissing) { continue }
+            
+            # Check if installed
+            $isInstalled = $installedIds -contains $app.Id
+            if (-not $isInstalled) {
+                $missingApp = [PSCustomObject]@{
+                    AppId = $app.Id
+                    AppName = $app.Name
+                    Priority = $app.Priority
+                    AppConfig = $app
+                    TargetVersion = if ($app.VersionPinMode -eq 'exact' -and $app.PinnedVersion) { $app.PinnedVersion } else { 'Latest' }
+                }
+                $missing += $missingApp
+                Write-PatchLog "Application $($app.Name) ($($app.Id)) is missing and marked for install" -Type Info
+            }
+        }
+        
+        Write-PatchLog "Found $($missing.Count) missing applications to install" -Type Info
+    }
+    catch {
+        Write-PatchLog "Failed to check for missing applications: $_" -Type Error
+    }
+    
+    return $missing
 }
 

@@ -156,12 +156,21 @@ class ManagedApplication {
     [string]$InstallArguments
     [bool]$RequiresReboot
     [hashtable]$DeferralOverride
+    # New properties for install missing and version pinning
+    [bool]$InstallIfMissing
+    [bool]$DeferInitialInstall
+    [string]$VersionPinMode      # max, exact, freeze, or $null for normal
+    [string]$PinnedVersion
     
     ManagedApplication() {
         $this.Enabled = $true
         $this.Priority = [UpdatePriority]::Normal
         $this.ConflictingProcesses = @()
         $this.RequiresReboot = $false
+        $this.InstallIfMissing = $false
+        $this.DeferInitialInstall = $false
+        $this.VersionPinMode = $null
+        $this.PinnedVersion = $null
     }
     
     static [ManagedApplication] FromHashtable([hashtable]$ht) {
@@ -176,6 +185,11 @@ class ManagedApplication {
         if ($ht.InstallArguments) { $app.InstallArguments = $ht.InstallArguments }
         if ($null -ne $ht.RequiresReboot) { $app.RequiresReboot = $ht.RequiresReboot }
         if ($ht.DeferralOverride) { $app.DeferralOverride = $ht.DeferralOverride }
+        # New properties
+        if ($null -ne $ht.InstallIfMissing) { $app.InstallIfMissing = $ht.InstallIfMissing }
+        if ($null -ne $ht.DeferInitialInstall) { $app.DeferInitialInstall = $ht.DeferInitialInstall }
+        if ($ht.VersionPinMode) { $app.VersionPinMode = $ht.VersionPinMode }
+        if ($ht.PinnedVersion) { $app.PinnedVersion = $ht.PinnedVersion }
         return $app
     }
 }

@@ -5,6 +5,7 @@ function Start-PatchCycle {
     .DESCRIPTION
         Orchestrates the installation of pending updates with deferral handling,
         notifications, and logging. This is the main entry point for update installation.
+        Can also install missing applications from the catalog.
     .PARAMETER Interactive
         Run in interactive mode with user notifications
     .PARAMETER Force
@@ -15,12 +16,17 @@ function Start-PatchCycle {
         Only install updates of specified priority or higher
     .PARAMETER AppId
         Only update specific application(s)
+    .PARAMETER InstallMissing
+        Install applications from catalog that are not currently installed
     .EXAMPLE
         Start-PatchCycle
         Runs a full patch cycle for all managed applications
     .EXAMPLE
         Start-PatchCycle -Interactive
         Runs with user notifications and deferral dialogs
+    .EXAMPLE
+        Start-PatchCycle -InstallMissing
+        Installs missing applications and updates existing ones
     .EXAMPLE
         spc -Force -NoReboot
         Uses alias to force updates without rebooting
@@ -42,7 +48,10 @@ function Start-PatchCycle {
         [string]$Priority,
         
         [Parameter()]
-        [string[]]$AppId
+        [string[]]$AppId,
+        
+        [Parameter()]
+        [switch]$InstallMissing
     )
     
     $result = [PatchCycleResult]::new()
@@ -56,6 +65,89 @@ function Start-PatchCycle {
             Write-PatchLog $result.Message -Type Error
             $result.Complete()
             return $result
+        }
+        
+        # Get configuration and managed apps
+        $config = Get-PatchMyPCConfig
+        $managedApps = Get-ManagedApplicationsInternal
+        
+        # Handle missing applications first if requested
+        if ($InstallMissing) {
+            Write-PatchLog "Checking for missing applications to install" -Type Info
+            $missingApps = Get-MissingApplication
+            
+            # Filter by priority if specified
+            if ($Priority) {
+                $priorityLevel = [UpdatePriority]$Priority
+                $missingApps = $missingApps | Where-Object { $_.Priority -ge $priorityLevel }
+            }
+            
+            # Filter by AppId if specified
+            if ($AppId) {
+                $missingApps = $missingApps | Where-Object { $AppId -contains $_.AppId }
+            }
+            
+            foreach ($app in $missingApps) {
+                Write-PatchLog "Processing missing application: $($app.AppName) ($($app.AppId))" -Type Info
+                
+                $appConfig = $app.AppConfig
+                
+                # Check if deferral is configured for initial install
+                if ($appConfig.DeferInitialInstall -and -not $Force) {
+                    if ($Interactive) {
+                        # Create a pseudo PatchStatus for the deferral dialog
+                        $pseudoStatus = [PatchStatus]::new()
+                        $pseudoStatus.AppId = $app.AppId
+                        $pseudoStatus.AppName = $app.AppName
+                        $pseudoStatus.InstalledVersion = 'Not Installed'
+                        $pseudoStatus.AvailableVersion = $app.TargetVersion
+                        $pseudoStatus.UpdateAvailable = $true
+                        $pseudoStatus.Priority = $app.Priority
+                        
+                        $userChoice = Show-DeferralDialogFull -Updates @($pseudoStatus) -Config $config -Timeout 60
+                        
+                        if ($userChoice -eq 'Defer') {
+                            $installResult = [InstallationResult]::new()
+                            $installResult.AppId = $app.AppId
+                            $installResult.AppName = $app.AppName
+                            $installResult.Status = [InstallationStatus]::Deferred
+                            $installResult.Message = "Initial installation deferred by user"
+                            $installResult.ExitCode = 1602
+                            
+                            $result.Results += $installResult
+                            $result.Deferred++
+                            $result.TotalUpdates++
+                            
+                            Write-PatchLog "Initial installation deferred for $($app.AppName)" -Type Info
+                            continue
+                        }
+                    }
+                    else {
+                        # Non-interactive with deferral enabled - skip
+                        Write-PatchLog "Skipping $($app.AppName) - initial install deferral enabled (use -Force or -Interactive)" -Type Info
+                        continue
+                    }
+                }
+                
+                # Install the missing application
+                $installResult = Install-MissingApplication -AppId $app.AppId -AppConfig $appConfig -Force:$Force
+                $result.Results += $installResult
+                $result.TotalUpdates++
+                
+                if ($installResult.Status -eq [InstallationStatus]::Success) {
+                    $result.Installed++
+                    
+                    if ($installResult.RebootRequired) {
+                        $result.RebootRequired = $true
+                    }
+                }
+                elseif ($installResult.Status -eq [InstallationStatus]::Deferred) {
+                    $result.Deferred++
+                }
+                else {
+                    $result.Failed++
+                }
+            }
         }
         
         # Get available updates
@@ -72,21 +164,17 @@ function Start-PatchCycle {
             $updates = $updates | Where-Object { $AppId -contains $_.AppId }
         }
         
-        $result.TotalUpdates = $updates.Count
+        $result.TotalUpdates += $updates.Count
         
-        if ($updates.Count -eq 0) {
+        if ($updates.Count -eq 0 -and $result.TotalUpdates -eq 0) {
             $result.Success = $true
-            $result.Message = "No updates available"
+            $result.Message = "No updates or missing applications to process"
             Write-PatchLog $result.Message -Type Info
             $result.Complete()
             return $result
         }
         
         Write-PatchLog "Found $($updates.Count) updates to process" -Type Info
-        
-        # Get configuration and managed apps
-        $config = Get-PatchMyPCConfig
-        $managedApps = Get-ManagedApplicationsInternal
         
         # Process each update
         foreach ($update in $updates) {

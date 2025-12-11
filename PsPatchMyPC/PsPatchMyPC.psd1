@@ -1,7 +1,7 @@
 @{
     # Module identification
     RootModule        = 'PsPatchMyPC.psm1'
-    ModuleVersion     = '1.0.5'
+    ModuleVersion     = '1.1.0'
     GUID              = 'b8e7c3a1-4f2d-4e9a-8b1c-3d5e7f9a2b4c'
     Author            = 'Thomas Tyson'
     CompanyName       = 'Community'
@@ -80,6 +80,25 @@
             LicenseUri   = 'https://github.com/thomastysong/PsPatchMyPC/blob/main/LICENSE'
             ProjectUri   = 'https://github.com/thomastysong/PsPatchMyPC'
             ReleaseNotes = @'
+## Version 1.1.0
+### New Features
+- **Install Missing Applications**: Use `-InstallMissing` parameter to install catalog apps that are not yet installed
+- **Version Pinning**: Three modes to control updates:
+  - `max`: Allow updates up to a specified version (e.g., don't update Chrome past v130)
+  - `exact`: Install and maintain a specific version only (e.g., always keep Python 3.11.9)
+  - `freeze`: Never update (keep current version)
+- **Per-App Initial Install Deferral**: Configure `deferInitialInstall` to allow users to defer first-time installations
+- New catalog fields: `installIfMissing`, `deferInitialInstall`, `versionPin`
+
+### Usage Examples
+```powershell
+# Install missing apps and update existing ones
+Start-PatchCycle -InstallMissing -NoReboot
+
+# Force install all missing apps without deferrals
+Start-PatchCycle -InstallMissing -Force
+```
+
 ## Version 1.0.5
 ### Bug Fixes
 - Fixed non-admin scenarios where deferral state and compliance output could not be persisted (ProgramData not writable)
