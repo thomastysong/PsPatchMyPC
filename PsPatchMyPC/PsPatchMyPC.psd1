@@ -1,7 +1,7 @@
 @{
     # Module identification
     RootModule        = 'PsPatchMyPC.psm1'
-    ModuleVersion     = '1.1.3'
+    ModuleVersion     = '1.1.4'
     GUID              = 'b8e7c3a1-4f2d-4e9a-8b1c-3d5e7f9a2b4c'
     Author            = 'Thomas Tyson'
     CompanyName       = 'Community'
@@ -80,6 +80,12 @@
             LicenseUri   = 'https://github.com/thomastysong/PsPatchMyPC/blob/main/LICENSE'
             ProjectUri   = 'https://github.com/thomastysong/PsPatchMyPC'
             ReleaseNotes = @'
+## Version 1.1.4
+### Improvements
+- Interactive mode now shows a toast notification when no updates are available
+- Users are informed that the system is up to date when running `Start-PatchCycle -Interactive`
+- Improves user experience by providing feedback even when there's nothing to update
+
 ## Version 1.1.3
 ### Bug Fixes
 - Fixed array filtering bug in Remove-ManagedApplication that could leave null element in catalog
