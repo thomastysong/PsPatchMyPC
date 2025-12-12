@@ -174,6 +174,18 @@ function Start-PatchCycle {
                 $result.Message = "No updates available (use -InstallMissing to install missing catalog apps)"
             }
             Write-PatchLog $result.Message -Type Info
+            
+            # In interactive mode, show a notification even when there are no updates
+            if ($Interactive) {
+                try {
+                    Show-ToastNotification -Title "Software Updates" -Message "All applications are up to date. No updates required." -Duration 5
+                    Write-PatchLog "Displayed 'no updates' notification in interactive mode" -Type Info
+                }
+                catch {
+                    Write-PatchLog "Failed to show notification: $_" -Type Warning
+                }
+            }
+            
             $result.Complete()
             return $result
         }
