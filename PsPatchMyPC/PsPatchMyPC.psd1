@@ -1,7 +1,7 @@
 @{
     # Module identification
     RootModule        = 'PsPatchMyPC.psm1'
-    ModuleVersion     = '1.1.5'
+    ModuleVersion     = '1.1.6'
     GUID              = 'b8e7c3a1-4f2d-4e9a-8b1c-3d5e7f9a2b4c'
     Author            = 'Thomas Tyson'
     CompanyName       = 'Community'
@@ -80,6 +80,12 @@
             LicenseUri   = 'https://github.com/thomastysong/PsPatchMyPC/blob/main/LICENSE'
             ProjectUri   = 'https://github.com/thomastysong/PsPatchMyPC'
             ReleaseNotes = @'
+## Version 1.1.6
+### New Features
+- **DriverManagement integration (UI reuse)**: Optional DriverManagement pseudo work item so `Start-PatchCycle -Interactive` can enforce deferrals using the same dialog and registry state.
+- **Reboot prompt**: If DriverManagement reports `RebootRequired`, PsPatchMyPC shows a **Restart now / Later** prompt in interactive mode (including in the active user session when running as SYSTEM).
+- **Config**: Added `DriverManagement` settings to `Config/config.psd1` and `PsPatchMyPCConfig`.
+
 ## Version 1.1.5
 ### Improvements
 - Default applications.json catalog now includes `installIfMissing: true` for all enabled applications

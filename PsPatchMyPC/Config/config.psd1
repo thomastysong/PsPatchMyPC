@@ -74,4 +74,15 @@
         UserNotificationTime = '09:00'
         TaskPath             = '\PsPatchMyPC\'
     }
+
+    # DriverManagement integration (Driver/Intel/WU) - treated as a pseudo work item for deferral UI
+    DriverManagement = @{
+        Enabled              = $false
+        IncludeWindowsUpdates = $true
+        UiTimeoutSeconds     = 60
+        DeferralOverride     = @{
+            MaxCount     = 3
+            DeadlineDays = 7
+        }
+    }
 }

@@ -60,6 +60,13 @@ function Get-PatchMyPCConfig {
                     $config.Updates[$key] = $fileConfig.Updates[$key]
                 }
             }
+
+            # Merge DriverManagement integration
+            if ($fileConfig.DriverManagement) {
+                foreach ($key in $fileConfig.DriverManagement.Keys) {
+                    $config.DriverManagement[$key] = $fileConfig.DriverManagement[$key]
+                }
+            }
             
             # Override paths if specified
             if ($fileConfig.Paths) {

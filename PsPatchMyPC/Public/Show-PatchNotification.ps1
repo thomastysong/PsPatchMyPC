@@ -483,3 +483,178 @@ function Show-DeferralDialogFull {
     }
 }
 
+function Show-RebootPrompt {
+    <#
+    .SYNOPSIS
+        Shows a reboot prompt (Restart now / Later) using the same WPF UX as PsPatchMyPC.
+    .OUTPUTS
+        'RestartNow' or 'Later'
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter()]
+        [PsPatchMyPCConfig]$Config,
+        
+        [Parameter()]
+        [int]$Timeout = 300
+    )
+    
+    if (-not $Config) { $Config = Get-PatchMyPCConfig }
+
+    # If running as SYSTEM, show the prompt in the active user session via Invoke-AsCurrentUser
+    try {
+        $currentUser = [Security.Principal.WindowsIdentity]::GetCurrent()
+        $isSystem = $currentUser.User.Value -eq 'S-1-5-18'
+    }
+    catch { $isSystem = $false }
+
+    if ($isSystem) {
+        try {
+            $resultDir = Join-Path $env:PUBLIC 'PsPatchMyPC'
+            if (-not (Test-Path $resultDir)) { New-Item -Path $resultDir -ItemType Directory -Force | Out-Null }
+            $resultFile = Join-Path $resultDir ("reboot_prompt_{0}.txt" -f ([guid]::NewGuid().ToString('n')))
+            if (Test-Path $resultFile) { Remove-Item -Path $resultFile -Force -ErrorAction SilentlyContinue }
+
+            $selfModulePath = $PSScriptRoot  # PsPatchMyPC/Public
+            $moduleRoot = Split-Path $selfModulePath -Parent
+            $manifest = Join-Path $moduleRoot 'PsPatchMyPC.psd1'
+
+            $sb = [scriptblock]::Create(@"
+Import-Module '$manifest' -Force -ErrorAction SilentlyContinue
+\$cfg = Get-PatchMyPCConfig
+\$choice = Show-RebootPrompt -Config \$cfg -Timeout $Timeout
+Set-Content -Path '$resultFile' -Value \$choice -Encoding ASCII -Force
+"@)
+
+            Invoke-AsCurrentUser -ScriptBlock $sb -Wait | Out-Null
+
+            if (Test-Path $resultFile) {
+                $choice = (Get-Content -Path $resultFile -ErrorAction SilentlyContinue | Select-Object -First 1)
+                Remove-Item -Path $resultFile -Force -ErrorAction SilentlyContinue
+                if ($choice -in @('RestartNow', 'Later')) { return $choice }
+            }
+        }
+        catch {
+            Write-PatchLog "Failed to show reboot prompt in user session: $_" -Type Warning
+        }
+        return 'Later'
+    }
+    
+    # WPF requires STA thread - run in separate runspace if needed
+    $currentThread = [System.Threading.Thread]::CurrentThread
+    if ($currentThread.GetApartmentState() -ne 'STA') {
+        $runspace = [runspacefactory]::CreateRunspace()
+        $runspace.ApartmentState = 'STA'
+        $runspace.ThreadOptions = 'ReuseThread'
+        $runspace.Open()
+        
+        $ps = [powershell]::Create()
+        $ps.Runspace = $runspace
+        
+        $null = $ps.AddScript({
+            param($AccentColor, $CompanyName, $Timeout)
+            Add-Type -AssemblyName PresentationFramework -ErrorAction SilentlyContinue
+            
+            $xaml = Get-RebootPromptDialogXaml -AccentColor $AccentColor -CompanyName $CompanyName
+            $window = Show-WPFDialog -Xaml $xaml -Timeout $Timeout
+            if (-not $window) { return 'Later' }
+            
+            $script:dialogResult = 'Later'
+            
+            $restartButton = $window.FindName("RestartButton")
+            $laterButton = $window.FindName("LaterButton")
+            
+            if ($restartButton) {
+                $restartButton.Add_Click({
+                    $script:dialogResult = 'RestartNow'
+                    $window.Close()
+                })
+            }
+            if ($laterButton) {
+                $laterButton.Add_Click({
+                    $script:dialogResult = 'Later'
+                    $window.Close()
+                })
+            }
+            
+            # Auto-close timeout => Later
+            $script:remainingSeconds = $Timeout
+            $timer = New-Object System.Windows.Threading.DispatcherTimer
+            $timer.Interval = [TimeSpan]::FromSeconds(1)
+            $timer.Add_Tick({
+                $script:remainingSeconds--
+                if ($script:remainingSeconds -le 0) {
+                    $timer.Stop()
+                    $script:dialogResult = 'Later'
+                    $window.Close()
+                }
+            })
+            $window.Add_Loaded({ $timer.Start() })
+            
+            $window.ShowDialog() | Out-Null
+            return $script:dialogResult
+        })
+        
+        $null = $ps.AddArgument($Config.Notifications.AccentColor)
+        $null = $ps.AddArgument($Config.Notifications.CompanyName)
+        $null = $ps.AddArgument($Timeout)
+        
+        try {
+            $r = $ps.Invoke()
+            return $r[0]
+        }
+        finally {
+            $ps.Dispose()
+            $runspace.Close()
+            $runspace.Dispose()
+        }
+    }
+    
+    # Already in STA - run directly
+    try {
+        Add-Type -AssemblyName PresentationFramework -ErrorAction SilentlyContinue
+        
+        $xaml = Get-RebootPromptDialogXaml -AccentColor $Config.Notifications.AccentColor -CompanyName $Config.Notifications.CompanyName
+        $window = Show-WPFDialog -Xaml $xaml -Timeout $Timeout
+        if (-not $window) { return 'Later' }
+        
+        $script:dialogResult = 'Later'
+        
+        $restartButton = $window.FindName("RestartButton")
+        $laterButton = $window.FindName("LaterButton")
+        
+        if ($restartButton) {
+            $restartButton.Add_Click({
+                $script:dialogResult = 'RestartNow'
+                $window.Close()
+            })
+        }
+        if ($laterButton) {
+            $laterButton.Add_Click({
+                $script:dialogResult = 'Later'
+                $window.Close()
+            })
+        }
+        
+        $script:remainingSeconds = $Timeout
+        $timer = New-Object System.Windows.Threading.DispatcherTimer
+        $timer.Interval = [TimeSpan]::FromSeconds(1)
+        $timer.Add_Tick({
+            $script:remainingSeconds--
+            if ($script:remainingSeconds -le 0) {
+                $timer.Stop()
+                $script:dialogResult = 'Later'
+                $window.Close()
+            }
+        })
+        $window.Add_Loaded({ $timer.Start() })
+        
+        $window.ShowDialog() | Out-Null
+        return $script:dialogResult
+    }
+    catch {
+        Write-PatchLog "Failed to show reboot prompt: $_" -Type Warning
+        return 'Later'
+    }
+}
+

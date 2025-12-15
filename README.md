@@ -53,6 +53,28 @@ Start-PatchCycle -Interactive
 Start-PatchCycle -NoReboot
 ```
 
+## DriverManagement integration (deferral UI + reboot prompt)
+
+PsPatchMyPC can optionally treat **DriverManagement** (drivers + Intel + Windows Updates) as a **pseudo work item** so it reuses the same deferral dialog and state persistence as applications.
+
+### Enable
+
+Edit `PsPatchMyPC/PsPatchMyPC/Config/config.psd1` and set:
+
+- `DriverManagement.Enabled = $true`
+
+Optional settings:
+
+- `DriverManagement.IncludeWindowsUpdates` (default `$true`)
+- `DriverManagement.UiTimeoutSeconds` (default `60`)
+- `DriverManagement.DeferralOverride.MaxCount` / `DriverManagement.DeferralOverride.DeadlineDays`
+
+### Behavior
+
+- In `Start-PatchCycle -Interactive`, users can **Defer** or **Install now** for “Drivers & Windows Updates”.
+- PsPatchMyPC calls DriverManagement with `-NoReboot` (reboot is not forced).
+- If DriverManagement reports a reboot is required, PsPatchMyPC shows a **Restart now / Later** prompt.
+
 ## Deferral System
 
 PsPatchMyPC implements a progressive deferral model inspired by macadmins Nudge:

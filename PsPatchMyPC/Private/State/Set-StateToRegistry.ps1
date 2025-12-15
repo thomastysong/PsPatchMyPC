@@ -109,7 +109,11 @@ function Initialize-DeferralState {
         [string]$TargetVersion,
         
         [Parameter()]
-        [PsPatchMyPCConfig]$Config
+        [PsPatchMyPCConfig]$Config,
+
+        # Optional per-item override (e.g. DriverManagement integration)
+        [Parameter()]
+        [hashtable]$DeferralOverride
     )
 
     # Normalize TargetVersion (some winget packages report empty available versions)
@@ -140,8 +144,16 @@ function Initialize-DeferralState {
         $Config = Get-PatchMyPCConfig
     }
     
-    $state.MaxDeferrals = $Config.Deferrals.MaxCount
-    $state.DeadlineDate = [datetime]::UtcNow.AddDays($Config.Deferrals.DeadlineDays)
+    $maxCount = $Config.Deferrals.MaxCount
+    $deadlineDays = $Config.Deferrals.DeadlineDays
+
+    if ($DeferralOverride) {
+        if ($null -ne $DeferralOverride.MaxCount) { $maxCount = [int]$DeferralOverride.MaxCount }
+        if ($null -ne $DeferralOverride.DeadlineDays) { $deadlineDays = [int]$DeferralOverride.DeadlineDays }
+    }
+
+    $state.MaxDeferrals = $maxCount
+    $state.DeadlineDate = [datetime]::UtcNow.AddDays($deadlineDays)
     $state.Phase = [DeferralPhase]::Initial
     
     # Save initial state (Set-StateToRegistry handles fallback internally)

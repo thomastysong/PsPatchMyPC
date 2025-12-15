@@ -152,6 +152,20 @@ function Start-PatchCycle {
         
         # Get available updates
         $updates = Get-PatchStatus -ManagedOnly
+
+        # DriverManagement integration (pseudo work item)
+        $dmCfg = $config.DriverManagement
+        $dmEnabled = $false
+        if ($null -ne $dmCfg -and $null -ne $dmCfg.Enabled) {
+            # Support bool or 'true'/'false' strings
+            $dmEnabled = ($dmCfg.Enabled -eq $true -or ([string]$dmCfg.Enabled).ToLowerInvariant() -eq 'true')
+        }
+        if ($dmEnabled) {
+            $dmWorkItem = Get-DriverManagementWorkItemInternal -Config $config
+            if ($dmWorkItem) {
+                $updates = @($updates) + @($dmWorkItem)
+            }
+        }
         
         # Filter by priority if specified
         if ($Priority) {
@@ -195,6 +209,112 @@ function Start-PatchCycle {
         # Process each update
         foreach ($update in $updates) {
             Write-PatchLog "Processing update for $($update.AppName) ($($update.AppId))" -Type Info
+
+            # DriverManagement pseudo work item
+            if ($update.AppId -eq 'PSDriverManagement.DriverManagement') {
+                $targetVersion = 'Latest'
+                $dmOverride = $null
+                if ($dmCfg -and $dmCfg.DeferralOverride) {
+                    $dmOverride = $dmCfg.DeferralOverride
+                }
+
+                $deferralState = Initialize-DeferralState -AppId $update.AppId -TargetVersion $targetVersion -Config $config -DeferralOverride $dmOverride
+                $deferralState.Phase = Get-DeferralPhaseInternal -Deadline $deferralState.DeadlineDate -Config $config
+                Set-StateToRegistry -State $deferralState
+
+                if (-not $Force -and $deferralState.CanDefer()) {
+                    if ($Interactive) {
+                        $timeout = 60
+                        if ($dmCfg -and $dmCfg.UiTimeoutSeconds) { $timeout = [int]$dmCfg.UiTimeoutSeconds }
+                        $userChoice = Show-DeferralDialogFull -Updates @($update) -Config $config -Timeout $timeout
+                        if ($userChoice -eq 'Defer') {
+                            $deferralState.DeferralCount++
+                            $deferralState.LastDeferral = [datetime]::UtcNow
+                            Set-StateToRegistry -State $deferralState
+
+                            $installResult = [InstallationResult]::new()
+                            $installResult.AppId = $update.AppId
+                            $installResult.AppName = $update.AppName
+                            $installResult.Status = [InstallationStatus]::Deferred
+                            $installResult.Message = "Deferred by user ($($deferralState.GetRemainingDeferrals()) remaining)"
+                            $installResult.ExitCode = 1602
+
+                            $result.Results += $installResult
+                            $result.Deferred++
+                            Write-PatchLog "Driver management deferred by user" -Type Info
+                            continue
+                        }
+                    }
+                }
+
+                # Run DriverManagement engine
+                $installResult = [InstallationResult]::new()
+                $installResult.AppId = $update.AppId
+                $installResult.AppName = $update.AppName
+                $installResult.Status = [InstallationStatus]::InProgress
+
+                $startTime = Get-Date
+                try {
+                    Import-Module DriverManagement -Force -ErrorAction Stop
+
+                    $includeWU = $true
+                    if ($dmCfg -and $null -ne $dmCfg.IncludeWindowsUpdates) {
+                        $includeWU = ($dmCfg.IncludeWindowsUpdates -eq $true -or ([string]$dmCfg.IncludeWindowsUpdates).ToLowerInvariant() -eq 'true')
+                    }
+
+                    $dmParams = @{}
+                    if ($includeWU) { $dmParams.IncludeWindowsUpdates = $true }
+                    # Option A: keep NoReboot (we handle reboot via PsPatchMyPC UI)
+                    $dmParams.NoReboot = $true
+
+                    $dmResult = Invoke-DriverManagement @dmParams
+
+                    $installResult.Status = if ($dmResult.Success) { [InstallationStatus]::Success } else { [InstallationStatus]::Failed }
+                    $installResult.ExitCode = $dmResult.ExitCode
+                    $installResult.Message = $dmResult.Message
+                    $installResult.RebootRequired = [bool]$dmResult.RebootRequired
+
+                    if ($dmResult.Success) {
+                        $result.Installed++
+                        Remove-StateFromRegistry -AppId $update.AppId
+                    }
+                    else {
+                        $result.Failed++
+                    }
+
+                    if ($installResult.RebootRequired) {
+                        $result.RebootRequired = $true
+
+                        # Option A: handle reboot explicitly via PsPatchMyPC UI (Restart now / Later)
+                        # This does not force reboot; it prompts and lets the user choose.
+                        if ($Interactive) {
+                            $timeout = 300
+                            if ($config.Notifications.DialogTimeoutSeconds) { $timeout = [int]$config.Notifications.DialogTimeoutSeconds }
+                            $choice = Show-RebootPrompt -Config $config -Timeout $timeout
+                            if ($choice -eq 'RestartNow') {
+                                Write-PatchLog "User chose to restart now" -Type Warning
+                                Restart-Computer -Force
+                            }
+                            else {
+                                Write-PatchLog "User chose to restart later" -Type Info
+                            }
+                        }
+                    }
+                }
+                catch {
+                    $installResult.Status = [InstallationStatus]::Failed
+                    $installResult.ExitCode = 1
+                    $installResult.Message = "Driver management failed: $($_.Exception.Message)"
+                    $result.Failed++
+                    Write-PatchLog $installResult.Message -Type Error
+                }
+                finally {
+                    $installResult.Duration = (Get-Date) - $startTime
+                    $result.Results += $installResult
+                }
+
+                continue
+            }
             
             # Get or initialize deferral state
             $targetVersion = [string]$update.AvailableVersion

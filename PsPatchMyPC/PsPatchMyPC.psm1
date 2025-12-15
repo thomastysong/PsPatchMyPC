@@ -42,6 +42,7 @@ $privateFiles = @(
     'Private\Logging\Write-EventLogEntry.ps1'
     'Private\Core\Get-InstalledApplication.ps1'
     'Private\Core\Get-AvailableUpdate.ps1'
+    'Private\Core\Get-DriverManagementWorkItem.ps1'
     'Private\Core\Install-ApplicationUpdate.ps1'
     'Private\Core\Test-ConflictingProcess.ps1'
     'Private\State\Get-StateFromRegistry.ps1'

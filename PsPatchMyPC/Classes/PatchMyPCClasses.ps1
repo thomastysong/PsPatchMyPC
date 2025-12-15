@@ -205,6 +205,7 @@ class PsPatchMyPCConfig {
     [hashtable]$Deferrals
     [hashtable]$Notifications
     [hashtable]$Updates
+    [hashtable]$DriverManagement
     [ManagedApplication[]]$Applications
     
     PsPatchMyPCConfig() {
@@ -232,6 +233,15 @@ class PsPatchMyPCConfig {
             InstallWindowStart = '03:00'
             InstallWindowEnd = '05:00'
             SkipMeteredConnections = $true
+        }
+        $this.DriverManagement = @{
+            Enabled = $false
+            IncludeWindowsUpdates = $true
+            UiTimeoutSeconds = 60
+            DeferralOverride = @{
+                MaxCount = 3
+                DeadlineDays = 7
+            }
         }
         $this.Applications = @()
     }

@@ -205,3 +205,70 @@ function Get-ToastNotificationXaml {
 "@
 }
 
+function Get-RebootPromptDialogXaml {
+    <#
+    .SYNOPSIS
+        Returns XAML for a reboot prompt dialog (Restart now / Later)
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter()]
+        [string]$Title = "Restart Required",
+        
+        [Parameter()]
+        [string]$Message = "Updates were installed and a restart is required to finish applying changes.",
+        
+        [Parameter()]
+        [string]$AccentColor = "#0078D4",
+        
+        [Parameter()]
+        [string]$CompanyName = "IT Department"
+    )
+    
+    return @"
+<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="$Title" Height="260" Width="520"
+        WindowStyle="None" AllowsTransparency="True" Background="Transparent"
+        Topmost="True" WindowStartupLocation="CenterScreen" ResizeMode="NoResize">
+    <Border CornerRadius="12" Background="#FF2D2D30" BorderBrush="$AccentColor" 
+            BorderThickness="2" Margin="10">
+        <Border.Effect>
+            <DropShadowEffect BlurRadius="20" ShadowDepth="0" Opacity="0.6"/>
+        </Border.Effect>
+        <Grid Margin="25">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+            
+            <!-- Header -->
+            <StackPanel Grid.Row="0" Orientation="Horizontal">
+                <TextBlock Text="&#xE777;" FontFamily="Segoe MDL2 Assets" 
+                          FontSize="28" Foreground="$AccentColor" Margin="0,0,12,0"/>
+                <TextBlock Text="$Title" FontSize="20" FontWeight="Bold" Foreground="White" VerticalAlignment="Center"/>
+            </StackPanel>
+            
+            <!-- Subheader -->
+            <TextBlock Grid.Row="1" Text="$CompanyName" Foreground="#888888" FontSize="12" Margin="0,8,0,0"/>
+            
+            <!-- Message -->
+            <TextBlock Grid.Row="2" TextWrapping="Wrap" Foreground="#CCCCCC" FontSize="14" Margin="0,15,0,0">
+                $Message
+            </TextBlock>
+            
+            <!-- Buttons -->
+            <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,18,0,0">
+                <Button Name="LaterButton" Content="Later" Width="120" Height="36" Margin="0,0,12,0"
+                        Background="#FF3F3F3F" Foreground="White" BorderThickness="0" Cursor="Hand"/>
+                <Button Name="RestartButton" Content="Restart Now" Width="140" Height="36"
+                        Background="$AccentColor" Foreground="White" BorderThickness="0" Cursor="Hand"/>
+            </StackPanel>
+        </Grid>
+    </Border>
+</Window>
+"@
+}
+
