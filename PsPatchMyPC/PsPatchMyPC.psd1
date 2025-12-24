@@ -1,7 +1,7 @@
 @{
     # Module identification
     RootModule        = 'PsPatchMyPC.psm1'
-    ModuleVersion     = '1.1.6'
+    ModuleVersion     = '1.1.7'
     GUID              = 'b8e7c3a1-4f2d-4e9a-8b1c-3d5e7f9a2b4c'
     Author            = 'Thomas Tyson'
     CompanyName       = 'Community'
@@ -80,6 +80,11 @@
             LicenseUri   = 'https://github.com/thomastysong/PsPatchMyPC/blob/main/LICENSE'
             ProjectUri   = 'https://github.com/thomastysong/PsPatchMyPC'
             ReleaseNotes = @'
+## Version 1.1.7
+### Changes
+- **DriverManagement enabled by default**: `DriverManagement.Enabled` is now `$true` in the default config
+- When running `Start-PatchCycle -Interactive`, DriverManagement (OEM/Intel/Windows Updates) will appear as a work item in the deferral UI
+
 ## Version 1.1.6
 ### New Features
 - **DriverManagement integration (UI reuse)**: Optional DriverManagement pseudo work item so `Start-PatchCycle -Interactive` can enforce deferrals using the same dialog and registry state.

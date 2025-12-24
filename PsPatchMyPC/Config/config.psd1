@@ -77,7 +77,7 @@
 
     # DriverManagement integration (Driver/Intel/WU) - treated as a pseudo work item for deferral UI
     DriverManagement = @{
-        Enabled              = $false
+        Enabled              = $true
         IncludeWindowsUpdates = $true
         UiTimeoutSeconds     = 60
         DeferralOverride     = @{
