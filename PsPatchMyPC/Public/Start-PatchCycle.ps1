@@ -272,7 +272,16 @@ function Start-PatchCycle {
                     # Option A: keep NoReboot (we handle reboot via PsPatchMyPC UI)
                     $dmParams.NoReboot = $true
 
-                    $dmResult = Invoke-DriverManagement @dmParams
+                    # Suppress nested verbose spam (e.g., PSWindowsUpdate "Found [0] Updates...") that can confuse
+                    # operators when DriverManagement applies driver updates but Windows Update finds none.
+                    $oldVerbosePreference = $VerbosePreference
+                    $VerbosePreference = 'SilentlyContinue'
+                    try {
+                        $dmResult = Invoke-DriverManagement @dmParams -Verbose:$false
+                    }
+                    finally {
+                        $VerbosePreference = $oldVerbosePreference
+                    }
 
                     $installResult.Status = if ($dmResult.Success) { [InstallationStatus]::Success } else { [InstallationStatus]::Failed }
                     $installResult.ExitCode = $dmResult.ExitCode
@@ -292,6 +301,13 @@ function Start-PatchCycle {
                     $dmWorkItemRan = $true
                     $dmWorkItemUpdatesAppliedKnown = $dmUpdatesAppliedKnown
                     $dmWorkItemUpdatesApplied = $dmUpdatesApplied
+
+                    if ($dmUpdatesAppliedKnown) {
+                        Write-PatchLog "DriverManagement finished: UpdatesApplied=$dmUpdatesApplied, RebootRequired=$($installResult.RebootRequired), Success=$($dmResult.Success)" -Type Info
+                    }
+                    else {
+                        Write-PatchLog "DriverManagement finished: RebootRequired=$($installResult.RebootRequired), Success=$($dmResult.Success)" -Type Info
+                    }
 
                     if ($dmResult.Success) {
                         if ($dmUpdatesAppliedKnown) {
@@ -458,7 +474,13 @@ function Start-PatchCycle {
             }
         }
         else {
-            $result.Message = "Patch cycle complete: $($result.Installed) installed, $($result.Failed) failed, $($result.Deferred) deferred"
+            # Use TotalUpdates in the message so it always matches the returned object properties.
+            # Note: TotalUpdates counts PsPatchMyPC work items (apps + DriverManagement pseudo-item), not OS/WU update count.
+            $result.Message = "Patch cycle complete: $($result.TotalUpdates) total, $($result.Installed) installed, $($result.Failed) failed, $($result.Deferred) deferred"
+
+            if ($dmWorkItemRan -and $dmWorkItemUpdatesAppliedKnown) {
+                $result.Message += " (DriverManagement applied $dmWorkItemUpdatesApplied update(s))"
+            }
         }
         
         Write-PatchLog $result.Message -Type $(if ($result.Success) { 'Info' } else { 'Warning' })

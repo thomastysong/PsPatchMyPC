@@ -83,6 +83,8 @@
 ## Version 1.1.8
 ### Bug Fixes
 - **DriverManagement result accuracy**: When DriverManagement runs successfully but applies 0 updates, PsPatchMyPC no longer reports `1 installed` / `TotalUpdates = 1`. It now reports no updates available (and shows the same "no updates" toast in interactive mode).
+- **Clearer summaries**: Patch cycle summary now includes `TotalUpdates` (so the message always matches the returned counters).
+- **Less confusing verbose output**: Suppresses nested verbose lines from DriverManagement/PSWindowsUpdate that can say “0 updates found” even when driver updates were applied; PsPatchMyPC logs DriverManagement `UpdatesApplied` when available.
 
 ## Version 1.1.7
 ### Changes
