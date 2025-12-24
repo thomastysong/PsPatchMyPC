@@ -1,7 +1,7 @@
 @{
     # Module identification
     RootModule        = 'PsPatchMyPC.psm1'
-    ModuleVersion     = '1.1.7'
+    ModuleVersion     = '1.1.8'
     GUID              = 'b8e7c3a1-4f2d-4e9a-8b1c-3d5e7f9a2b4c'
     Author            = 'Thomas Tyson'
     CompanyName       = 'Community'
@@ -80,6 +80,10 @@
             LicenseUri   = 'https://github.com/thomastysong/PsPatchMyPC/blob/main/LICENSE'
             ProjectUri   = 'https://github.com/thomastysong/PsPatchMyPC'
             ReleaseNotes = @'
+## Version 1.1.8
+### Bug Fixes
+- **DriverManagement result accuracy**: When DriverManagement runs successfully but applies 0 updates, PsPatchMyPC no longer reports `1 installed` / `TotalUpdates = 1`. It now reports no updates available (and shows the same "no updates" toast in interactive mode).
+
 ## Version 1.1.7
 ### Changes
 - **DriverManagement enabled by default**: `DriverManagement.Enabled` is now `$true` in the default config

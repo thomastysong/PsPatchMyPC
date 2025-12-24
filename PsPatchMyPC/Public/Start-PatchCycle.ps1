@@ -70,6 +70,11 @@ function Start-PatchCycle {
         # Get configuration and managed apps
         $config = Get-PatchMyPCConfig
         $managedApps = Get-ManagedApplicationsInternal
+
+        # Track DriverManagement outcomes for accurate summary messaging
+        $dmWorkItemRan = $false
+        $dmWorkItemUpdatesAppliedKnown = $false
+        $dmWorkItemUpdatesApplied = 0
         
         # Handle missing applications first if requested
         if ($InstallMissing) {
@@ -204,7 +209,7 @@ function Start-PatchCycle {
             return $result
         }
         
-        Write-PatchLog "Found $($updates.Count) updates to process" -Type Info
+        Write-PatchLog "Found $($updates.Count) items to process" -Type Info
         
         # Process each update
         foreach ($update in $updates) {
@@ -274,8 +279,36 @@ function Start-PatchCycle {
                     $installResult.Message = $dmResult.Message
                     $installResult.RebootRequired = [bool]$dmResult.RebootRequired
 
+                    # DriverManagement returns a DriverUpdateResult which includes UpdatesApplied.
+                    # Avoid counting "success with 0 updates applied" as an installed update.
+                    $dmUpdatesAppliedKnown = $false
+                    $dmUpdatesApplied = 0
+                    if ($null -ne $dmResult -and $null -ne $dmResult.PSObject.Properties['UpdatesApplied'] -and $null -ne $dmResult.UpdatesApplied) {
+                        $dmUpdatesAppliedKnown = $true
+                        $dmUpdatesApplied = [int]$dmResult.UpdatesApplied
+                    }
+
+                    # Capture for summary messaging
+                    $dmWorkItemRan = $true
+                    $dmWorkItemUpdatesAppliedKnown = $dmUpdatesAppliedKnown
+                    $dmWorkItemUpdatesApplied = $dmUpdatesApplied
+
                     if ($dmResult.Success) {
-                        $result.Installed++
+                        if ($dmUpdatesAppliedKnown) {
+                            if ($dmUpdatesApplied -gt 0) {
+                                $result.Installed++
+                            }
+                            else {
+                                # DriverManagement ran successfully but nothing was applicable.
+                                # Don't inflate TotalUpdates/Installed for "0 updates found/applied" runs.
+                                if ($result.TotalUpdates -gt 0) { $result.TotalUpdates-- }
+                            }
+                        }
+                        else {
+                            # Back-compat: older DriverManagement builds may not expose UpdatesApplied.
+                            $result.Installed++
+                        }
+
                         Remove-StateFromRegistry -AppId $update.AppId
                     }
                     else {
@@ -399,7 +432,34 @@ function Start-PatchCycle {
         
         # Determine overall success
         $result.Success = ($result.Failed -eq 0)
-        $result.Message = "Patch cycle complete: $($result.Installed) installed, $($result.Failed) failed, $($result.Deferred) deferred"
+
+        # When DriverManagement is enabled, it may run successfully with 0 updates applied.
+        # In that case we adjust counters above (and TotalUpdates may become 0). Mirror the same
+        # "no updates" messaging/UX used by the early-return path.
+        if ($result.TotalUpdates -eq 0 -and $result.Installed -eq 0 -and $result.Failed -eq 0 -and $result.Deferred -eq 0) {
+            if ($InstallMissing) {
+                $result.Message = "No updates available and no missing applications to install"
+            } else {
+                $result.Message = "No updates available (use -InstallMissing to install missing catalog apps)"
+            }
+
+            if ($dmWorkItemRan -and $dmWorkItemUpdatesAppliedKnown -and $dmWorkItemUpdatesApplied -eq 0) {
+                $result.Message += " (DriverManagement: no updates required)"
+            }
+
+            if ($Interactive) {
+                try {
+                    Show-ToastNotification -Title "Software Updates" -Message "All applications are up to date. No updates required." -Duration 5
+                    Write-PatchLog "Displayed 'no updates' notification in interactive mode" -Type Info
+                }
+                catch {
+                    Write-PatchLog "Failed to show notification: $_" -Type Warning
+                }
+            }
+        }
+        else {
+            $result.Message = "Patch cycle complete: $($result.Installed) installed, $($result.Failed) failed, $($result.Deferred) deferred"
+        }
         
         Write-PatchLog $result.Message -Type $(if ($result.Success) { 'Info' } else { 'Warning' })
         
