@@ -1,7 +1,7 @@
 @{
     # Module identification
     RootModule        = 'PsPatchMyPC.psm1'
-    ModuleVersion     = '1.1.8'
+    ModuleVersion     = '1.2.0'
     GUID              = 'b8e7c3a1-4f2d-4e9a-8b1c-3d5e7f9a2b4c'
     Author            = 'Thomas Tyson'
     CompanyName       = 'Community'
@@ -21,39 +21,47 @@
         'Get-PatchStatus'
         'Start-PatchCycle'
         'Get-PatchMyPCConfig'
-        
+
         # Winget management
         'Initialize-Winget'
         'Test-WingetAvailable'
         'Get-WingetUpdates'
         'Install-WingetUpdate'
-        
-        # Notifications
+
+        # Enterprise Notifications (NEW in 1.2.0)
         'Show-PatchNotification'
         'Show-DeferralDialog'
         'Show-ToastNotification'
-        
+        'Show-FullScreenPrompt'
+        'Show-EnterpriseNotification'
+        'Show-RebootPrompt'
+        'Show-NativeToast'
+        'Register-ToastProtocolHandler'
+        'Unregister-ToastProtocolHandler'
+        'Get-NotificationTypeForPhase'
+        'Get-ToastScenarioForPhase'
+
         # Scheduling
         'Register-PatchSchedule'
         'Unregister-PatchSchedule'
         'Get-PatchSchedule'
-        
+
         # Deferrals
         'Get-DeferralState'
         'Set-PatchDeferral'
         'Reset-DeferralState'
         'Test-DeferralAllowed'
         'Get-DeferralPhase'
-        
+
         # Reporting
         'Export-PatchReport'
         'Get-PatchCompliance'
-        
+
         # Application catalog
         'Get-ManagedApplications'
         'Add-ManagedApplication'
         'Remove-ManagedApplication'
-        
+
         # Logging
         'Get-PatchMyPCLogs'
     )
@@ -80,11 +88,40 @@
             LicenseUri   = 'https://github.com/thomastysong/PsPatchMyPC/blob/main/LICENSE'
             ProjectUri   = 'https://github.com/thomastysong/PsPatchMyPC'
             ReleaseNotes = @'
+## Version 1.2.0
+### New Features - Native Windows Enterprise Notifications
+- **Full-screen interstitial prompts (RUXIM-style)**: New `Show-FullScreenPrompt` displays Windows 11 upgrade-style full-screen prompts for critical updates when deadline has elapsed
+- **Native Windows toast notifications**: `Show-NativeToast` uses Windows.UI.Notifications WinRT API directly for proper Action Center integration
+- **Toast scenarios**: Support for `Reminder`, `Urgent`, `Alarm` scenarios - Urgent bypasses Focus Assist on Windows 11
+- **Toast action buttons**: Native Update Now/Remind Later buttons on toasts with protocol handler support
+- **Enterprise notification escalation**: `Show-EnterpriseNotification` automatically escalates notification type based on deferral phase:
+  - Initial phase: Standard toast
+  - Approaching phase: Reminder toast (persistent until dismissed)
+  - Imminent phase: Urgent toast + dialog
+  - Elapsed phase: Full-screen interstitial prompt
+- **Dismissal tracking**: System tracks notification dismissals and escalates to full-screen after configurable threshold
+- **Protocol handler**: `Register-ToastProtocolHandler` enables responding to toast button clicks even after PowerShell session ends
+
+### New Configuration Options
+- `Notifications.Enterprise.EnableFullScreenPrompts`: Enable RUXIM-style full-screen prompts
+- `Notifications.Enterprise.*ToastScenario`: Configure toast scenario per deferral phase
+- `Notifications.Enterprise.EnableToastActions`: Enable action buttons on toasts
+- `Notifications.Enterprise.EscalateToFullScreen`: Escalate to full-screen when deadline elapsed
+- `Notifications.Enterprise.EscalateAfterDismissals`: Number of dismissals before escalating
+
+### New Functions
+- `Show-FullScreenPrompt`: Full-screen interstitial (RUXIM-style)
+- `Show-EnterpriseNotification`: Intelligent notification with auto-escalation
+- `Show-NativeToast`: Native Windows toast with Action Center support
+- `Register-ToastProtocolHandler`: Register protocol for toast button responses
+- `Get-NotificationTypeForPhase`: Get recommended notification type for deferral phase
+- `Get-ToastScenarioForPhase`: Get toast scenario for deferral phase
+
 ## Version 1.1.8
 ### Bug Fixes
 - **DriverManagement result accuracy**: When DriverManagement runs successfully but applies 0 updates, PsPatchMyPC no longer reports `1 installed` / `TotalUpdates = 1`. It now reports no updates available (and shows the same "no updates" toast in interactive mode).
 - **Clearer summaries**: Patch cycle summary now includes `TotalUpdates` (so the message always matches the returned counters).
-- **Less confusing verbose output**: Suppresses nested verbose lines from DriverManagement/PSWindowsUpdate that can say “0 updates found” even when driver updates were applied; PsPatchMyPC logs DriverManagement `UpdatesApplied` when available.
+- **Less confusing verbose output**: Suppresses nested verbose lines from DriverManagement/PSWindowsUpdate that can say "0 updates found" even when driver updates were applied; PsPatchMyPC logs DriverManagement `UpdatesApplied` when available.
 
 ## Version 1.1.7
 ### Changes

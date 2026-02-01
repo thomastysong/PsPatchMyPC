@@ -14,6 +14,24 @@ enum DeferralPhase {
     Elapsed      # 5min refresh, 1hr max (aggressive)
 }
 
+# Notification type enum (enterprise notifications)
+enum NotificationType {
+    Toast           # Standard Windows toast notification (Action Center)
+    Dialog          # Modal WPF deferral dialog (center screen)
+    FullScreen      # Full-screen interstitial prompt (RUXIM-style)
+    Reminder        # Persistent toast that stays until dismissed
+    Urgent          # Urgent toast that bypasses Focus Assist
+}
+
+# Notification scenario for toast behavior
+enum ToastScenario {
+    Default         # Standard toast behavior (auto-dismiss)
+    Reminder        # Stays on screen until user acts, shows in Action Center
+    Alarm           # Looping audio, stays on screen
+    IncomingCall    # Special call-style UI
+    Urgent          # Bypasses Focus Assist (Windows 11+)
+}
+
 # Update priority enum
 enum UpdatePriority {
     Critical
@@ -227,6 +245,20 @@ class PsPatchMyPCConfig {
             EnableAggressiveMode = $true
             CompanyName = 'IT Department'
             AccentColor = '#0078D4'
+            Enterprise = @{
+                EnableFullScreenPrompts = $true
+                FullScreenTimeoutSeconds = 300
+                FullScreenTitle = 'Action Required'
+                FullScreenMessage = 'Important updates must be installed now.'
+                InitialToastScenario = 'Default'
+                ApproachingToastScenario = 'Reminder'
+                ImminentToastScenario = 'Urgent'
+                ElapsedToastScenario = 'Urgent'
+                EnableToastActions = $true
+                ProtocolScheme = 'pspatchmypc'
+                EscalateToFullScreen = $true
+                EscalateAfterDismissals = 3
+            }
         }
         $this.Updates = @{
             CheckIntervalHours = 4
