@@ -47,6 +47,35 @@
         ToastMessage          = 'A software update is ready to install. Click to proceed.'
         DialogTitle           = 'Update Required'
         DialogMessage         = 'Critical updates are ready to install. Save your work.'
+
+        # Enterprise notification settings (RUXIM-style)
+        Enterprise = @{
+            # Full-screen interstitial prompts
+            EnableFullScreenPrompts = 'true'      # Show full-screen prompts for elapsed deadlines
+            FullScreenTimeoutSeconds = 300         # Auto-proceed timeout for full-screen prompt
+            FullScreenTitle          = 'Action Required'
+            FullScreenMessage        = 'Important updates must be installed now. Your device will restart after updates are applied.'
+            FullScreenHeroImage      = ''         # Optional hero image path (1364x300 recommended)
+
+            # Toast scenarios based on deferral phase
+            InitialToastScenario     = 'Default'   # Standard toast for initial phase
+            ApproachingToastScenario = 'Reminder'  # Persistent toast for approaching deadline
+            ImminentToastScenario    = 'Urgent'    # Urgent toast (bypasses Focus Assist)
+            ElapsedToastScenario     = 'Urgent'    # Urgent toast for elapsed deadline
+
+            # Native toast actions (buttons)
+            EnableToastActions       = 'true'      # Enable Update Now/Defer buttons on toasts
+            ToastActionUpdateLabel   = 'Update Now'
+            ToastActionDeferLabel    = 'Remind Later'
+            ToastActionDismissLabel  = 'Dismiss'
+
+            # Protocol handler for toast activation
+            ProtocolScheme           = 'pspatchmypc'  # Custom protocol scheme
+
+            # Escalation behavior
+            EscalateToFullScreen     = 'true'      # Escalate to full-screen when deadline elapsed
+            EscalateAfterDismissals  = 3           # Show full-screen after N toast dismissals
+        }
     }
     
     ApplicationManagement = @{

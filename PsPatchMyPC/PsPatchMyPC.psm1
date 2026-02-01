@@ -49,6 +49,8 @@ $privateFiles = @(
     'Private\State\Set-StateToRegistry.ps1'
     'Private\Notification\Show-WPFDialog.ps1'
     'Private\Notification\Invoke-AsCurrentUser.ps1'
+    'Private\Notification\Show-NativeToast.ps1'
+    'Private\Notification\Register-ToastProtocol.ps1'
 )
 
 foreach ($file in $privateFiles) {
@@ -202,6 +204,12 @@ Export-ModuleMember -Function @(
     'Show-PatchNotification'
     'Show-DeferralDialog'
     'Show-ToastNotification'
+    'Show-FullScreenPrompt'
+    'Show-EnterpriseNotification'
+    'Show-RebootPrompt'
+    'Show-NativeToast'
+    'Register-ToastProtocolHandler'
+    'Unregister-ToastProtocolHandler'
     'Register-PatchSchedule'
     'Unregister-PatchSchedule'
     'Get-PatchSchedule'
@@ -210,6 +218,8 @@ Export-ModuleMember -Function @(
     'Reset-DeferralState'
     'Test-DeferralAllowed'
     'Get-DeferralPhase'
+    'Get-NotificationTypeForPhase'
+    'Get-ToastScenarioForPhase'
     'Export-PatchReport'
     'Get-PatchCompliance'
     'Get-ManagedApplications'

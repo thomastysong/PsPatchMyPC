@@ -3,51 +3,368 @@ function Show-PatchNotification {
     .SYNOPSIS
         Shows a patch notification to the user
     .DESCRIPTION
-        Displays a toast notification or dialog about pending updates
+        Displays a toast notification or dialog about pending updates.
+        Supports enterprise notification escalation based on deferral phase.
     .PARAMETER Type
-        Notification type: Toast, Dialog, or Both
+        Notification type: Toast, Dialog, FullScreen, Both, or Auto
+        Auto will select based on deferral phase (enterprise escalation)
     .PARAMETER Updates
         Array of pending updates to notify about
     .PARAMETER Timeout
         Auto-dismiss timeout in seconds
+    .PARAMETER DeferralPhase
+        Current deferral phase (used for Auto notification type)
     .EXAMPLE
         Show-PatchNotification -Type Toast -Updates $updates
     .EXAMPLE
         Show-PatchNotification -Type Dialog -Updates $updates -Timeout 300
+    .EXAMPLE
+        Show-PatchNotification -Type Auto -Updates $updates -DeferralPhase Elapsed
     #>
     [CmdletBinding()]
     param(
         [Parameter()]
-        [ValidateSet('Toast', 'Dialog', 'Both')]
+        [ValidateSet('Toast', 'Dialog', 'FullScreen', 'Both', 'Auto')]
         [string]$Type = 'Toast',
-        
+
         [Parameter()]
         [PatchStatus[]]$Updates,
-        
+
         [Parameter()]
-        [int]$Timeout = 300
+        [int]$Timeout = 300,
+
+        [Parameter()]
+        [DeferralPhase]$DeferralPhase = [DeferralPhase]::Initial
     )
-    
+
     $config = Get-PatchMyPCConfig
-    
+
     # Check if we need to run as user
     $currentUser = [Security.Principal.WindowsIdentity]::GetCurrent()
     $isSystem = $currentUser.User.Value -eq 'S-1-5-18'
-    
+
     if ($isSystem -and (Test-UserSessionActive)) {
         # Run notification in user context
         $scriptBlock = {
-            param($NotificationType, $UpdateCount, $TimeoutSecs)
+            param($NotificationType, $UpdateCount, $TimeoutSecs, $Phase)
             Import-Module PsPatchMyPC -Force
-            Show-PatchNotificationInternal -Type $NotificationType -UpdateCount $UpdateCount -Timeout $TimeoutSecs
+            Show-PatchNotificationInternal -Type $NotificationType -UpdateCount $UpdateCount -Timeout $TimeoutSecs -DeferralPhase $Phase
         }
-        
-        Invoke-AsCurrentUser -ScriptBlock $scriptBlock -Arguments @($Type, $Updates.Count, $Timeout) -Wait
+
+        Invoke-AsCurrentUser -ScriptBlock $scriptBlock -Arguments @($Type, $Updates.Count, $Timeout, $DeferralPhase.ToString()) -Wait
         return
     }
-    
+
     # Run directly
-    Show-PatchNotificationInternal -Type $Type -Updates $Updates -Timeout $Timeout
+    Show-PatchNotificationInternal -Type $Type -Updates $Updates -Timeout $Timeout -DeferralPhase $DeferralPhase
+}
+
+function Get-NotificationTypeForPhase {
+    <#
+    .SYNOPSIS
+        Determines the appropriate notification type based on deferral phase
+    .DESCRIPTION
+        Implements enterprise notification escalation logic:
+        - Initial: Standard toast
+        - Approaching: Reminder toast (persistent)
+        - Imminent: Urgent toast + Dialog
+        - Elapsed: Full-screen interstitial
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [DeferralPhase]$Phase,
+
+        [Parameter()]
+        [int]$DismissalCount = 0,
+
+        [Parameter()]
+        [PsPatchMyPCConfig]$Config
+    )
+
+    if (-not $Config) { $Config = Get-PatchMyPCConfig }
+
+    $enterprise = $Config.Notifications.Enterprise
+    $escalateAfter = if ($enterprise.EscalateAfterDismissals) { [int]$enterprise.EscalateAfterDismissals } else { 3 }
+
+    # Check if should escalate to full-screen based on dismissal count
+    if ($DismissalCount -ge $escalateAfter -and $enterprise.EscalateToFullScreen) {
+        return @{
+            Type = 'FullScreen'
+            Scenario = 'Urgent'
+            AllowDefer = ($Phase -ne [DeferralPhase]::Elapsed)
+        }
+    }
+
+    switch ($Phase) {
+        'Initial' {
+            return @{
+                Type = 'Toast'
+                Scenario = $enterprise.InitialToastScenario
+                AllowDefer = $true
+            }
+        }
+        'Approaching' {
+            return @{
+                Type = 'Toast'
+                Scenario = $enterprise.ApproachingToastScenario
+                AllowDefer = $true
+            }
+        }
+        'Imminent' {
+            return @{
+                Type = 'Both'  # Toast + Dialog
+                Scenario = $enterprise.ImminentToastScenario
+                AllowDefer = $true
+            }
+        }
+        'Elapsed' {
+            if ($enterprise.EscalateToFullScreen) {
+                return @{
+                    Type = 'FullScreen'
+                    Scenario = $enterprise.ElapsedToastScenario
+                    AllowDefer = $true  # Allow 1-hour defer even in elapsed
+                }
+            }
+            else {
+                return @{
+                    Type = 'Dialog'
+                    Scenario = 'Urgent'
+                    AllowDefer = $true  # 1-hour only
+                }
+            }
+        }
+        default {
+            return @{
+                Type = 'Toast'
+                Scenario = 'Default'
+                AllowDefer = $true
+            }
+        }
+    }
+}
+
+function Get-ToastScenarioForPhase {
+    <#
+    .SYNOPSIS
+        Gets the toast scenario string for the current deferral phase
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [DeferralPhase]$Phase,
+
+        [Parameter()]
+        [PsPatchMyPCConfig]$Config
+    )
+
+    if (-not $Config) { $Config = Get-PatchMyPCConfig }
+
+    $enterprise = $Config.Notifications.Enterprise
+    if (-not $enterprise) { return 'Default' }
+
+    switch ($Phase) {
+        'Initial' { return $enterprise.InitialToastScenario }
+        'Approaching' { return $enterprise.ApproachingToastScenario }
+        'Imminent' { return $enterprise.ImminentToastScenario }
+        'Elapsed' { return $enterprise.ElapsedToastScenario }
+        default { return 'Default' }
+    }
+}
+
+function Show-EnterpriseNotification {
+    <#
+    .SYNOPSIS
+        Shows an enterprise notification with automatic escalation
+    .DESCRIPTION
+        Intelligently selects notification type based on deferral phase,
+        dismissal history, and configuration. Implements the full RUXIM-style
+        notification escalation pattern.
+    .PARAMETER Updates
+        Array of pending updates
+    .PARAMETER DeferralState
+        Current deferral state for the primary update
+    .PARAMETER Config
+        PsPatchMyPC configuration
+    .OUTPUTS
+        Hashtable with Result (Install/Defer/Dismissed/Timeout) and Method
+    .EXAMPLE
+        $result = Show-EnterpriseNotification -Updates $updates -DeferralState $state
+        if ($result.Result -eq 'Install') { Install-Updates }
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter()]
+        [PatchStatus[]]$Updates,
+
+        [Parameter()]
+        [DeferralState]$DeferralState,
+
+        [Parameter()]
+        [PsPatchMyPCConfig]$Config,
+
+        [Parameter()]
+        [int]$Timeout
+    )
+
+    if (-not $Config) { $Config = Get-PatchMyPCConfig }
+
+    $phase = if ($DeferralState) { $DeferralState.Phase } else { [DeferralPhase]::Initial }
+    $canDefer = if ($DeferralState) { $DeferralState.CanDefer() } else { $true }
+    $deferralsRemaining = if ($DeferralState) { $DeferralState.GetRemainingDeferrals() } else { 5 }
+
+    # Get dismissal count from state
+    $dismissalCount = Get-NotificationDismissalCount -AppId ($Updates[0].AppId)
+
+    # Determine notification type
+    $notifConfig = Get-NotificationTypeForPhase -Phase $phase -DismissalCount $dismissalCount -Config $Config
+
+    Write-PatchLog "Enterprise notification: Phase=$phase, Type=$($notifConfig.Type), Scenario=$($notifConfig.Scenario), CanDefer=$canDefer" -Type Info
+
+    # Set timeout based on phase if not specified
+    if (-not $Timeout) {
+        $Timeout = switch ($phase) {
+            'Initial' { $Config.Notifications.DialogTimeoutSeconds }
+            'Approaching' { $Config.Notifications.DialogTimeoutSeconds }
+            'Imminent' { 180 }  # 3 minutes
+            'Elapsed' { $Config.Notifications.Enterprise.FullScreenTimeoutSeconds }
+            default { $Config.Notifications.DialogTimeoutSeconds }
+        }
+    }
+
+    $result = @{
+        Result = 'Dismissed'
+        Method = $notifConfig.Type
+        Phase = $phase
+    }
+
+    switch ($notifConfig.Type) {
+        'Toast' {
+            $toastResult = Show-NativeToast `
+                -Title $Config.Notifications.ToastTitle `
+                -Message $Config.Notifications.ToastMessage `
+                -AppName $Updates[0].AppName `
+                -Scenario $notifConfig.Scenario `
+                -DeferralsRemaining $deferralsRemaining `
+                -CanDefer $canDefer
+
+            $result.Result = if ($toastResult.Result) { $toastResult.Result } else { 'Dismissed' }
+            $result.Method = $toastResult.Method
+        }
+
+        'Dialog' {
+            $dialogResult = Show-DeferralDialogFull `
+                -Updates $Updates `
+                -Config $Config `
+                -Timeout $Timeout
+
+            $result.Result = $dialogResult
+        }
+
+        'FullScreen' {
+            $fsResult = Show-FullScreenPrompt `
+                -Updates $Updates `
+                -Config $Config `
+                -Timeout $Timeout `
+                -AllowDefer $notifConfig.AllowDefer
+
+            $result.Result = $fsResult
+        }
+
+        'Both' {
+            # Show toast first, then dialog
+            Show-NativeToast `
+                -Title $Config.Notifications.ToastTitle `
+                -Message "Updates require your attention" `
+                -AppName $Updates[0].AppName `
+                -Scenario $notifConfig.Scenario `
+                -DeferralsRemaining $deferralsRemaining `
+                -CanDefer $canDefer
+
+            Start-Sleep -Seconds 2
+
+            $dialogResult = Show-DeferralDialogFull `
+                -Updates $Updates `
+                -Config $Config `
+                -Timeout $Timeout
+
+            $result.Result = $dialogResult
+            $result.Method = 'Toast+Dialog'
+        }
+    }
+
+    # Update dismissal count if dismissed
+    if ($result.Result -in @('Dismissed', 'Timeout')) {
+        Update-NotificationDismissalCount -AppId ($Updates[0].AppId) -Increment
+    }
+    elseif ($result.Result -in @('Install', 'Update')) {
+        # Reset dismissal count on action
+        Update-NotificationDismissalCount -AppId ($Updates[0].AppId) -Reset
+    }
+
+    return $result
+}
+
+function Get-NotificationDismissalCount {
+    <#
+    .SYNOPSIS
+        Gets the notification dismissal count for an app
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string]$AppId
+    )
+
+    $regPath = "HKLM:\SOFTWARE\PsPatchMyPC\NotificationState\$AppId"
+    try {
+        if (Test-Path $regPath) {
+            $count = Get-ItemProperty -Path $regPath -Name 'DismissalCount' -ErrorAction SilentlyContinue
+            if ($count) { return [int]$count.DismissalCount }
+        }
+    }
+    catch { }
+
+    return 0
+}
+
+function Update-NotificationDismissalCount {
+    <#
+    .SYNOPSIS
+        Updates the notification dismissal count for an app
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string]$AppId,
+
+        [Parameter()]
+        [switch]$Increment,
+
+        [Parameter()]
+        [switch]$Reset
+    )
+
+    $regPath = "HKLM:\SOFTWARE\PsPatchMyPC\NotificationState\$AppId"
+
+    try {
+        if (-not (Test-Path $regPath)) {
+            New-Item -Path $regPath -Force | Out-Null
+        }
+
+        if ($Reset) {
+            Set-ItemProperty -Path $regPath -Name 'DismissalCount' -Value 0 -Type DWord
+            Set-ItemProperty -Path $regPath -Name 'LastReset' -Value (Get-Date -Format 'o') -Type String
+        }
+        elseif ($Increment) {
+            $current = Get-NotificationDismissalCount -AppId $AppId
+            Set-ItemProperty -Path $regPath -Name 'DismissalCount' -Value ($current + 1) -Type DWord
+            Set-ItemProperty -Path $regPath -Name 'LastDismissal' -Value (Get-Date -Format 'o') -Type String
+        }
+    }
+    catch {
+        Write-PatchLog "Failed to update notification dismissal count: $_" -Type Warning
+    }
 }
 
 function Show-PatchNotificationInternal {
@@ -59,29 +376,81 @@ function Show-PatchNotificationInternal {
     param(
         [Parameter()]
         [string]$Type = 'Toast',
-        
+
         [Parameter()]
         [PatchStatus[]]$Updates,
-        
+
         [Parameter()]
         [int]$UpdateCount,
-        
+
         [Parameter()]
-        [int]$Timeout = 300
+        [int]$Timeout = 300,
+
+        [Parameter()]
+        [string]$DeferralPhase = 'Initial'
     )
-    
+
     $config = Get-PatchMyPCConfig
     $count = if ($Updates) { $Updates.Count } else { $UpdateCount }
-    
+
+    # Parse deferral phase if string
+    $phase = try { [DeferralPhase]$DeferralPhase } catch { [DeferralPhase]::Initial }
+
+    # Handle Auto type - use enterprise escalation logic
+    if ($Type -eq 'Auto') {
+        if ($Updates -and $Updates.Count -gt 0) {
+            $deferralState = Get-StateFromRegistry -AppId $Updates[0].AppId
+            $result = Show-EnterpriseNotification -Updates $Updates -DeferralState $deferralState -Config $config -Timeout $Timeout
+            return $result.Result
+        }
+        else {
+            # No updates info, fall back to toast
+            $Type = 'Toast'
+        }
+    }
+
+    # Get scenario based on deferral phase for toasts
+    $scenario = Get-ToastScenarioForPhase -Phase $phase -Config $config
+
     switch ($Type) {
         'Toast' {
-            Show-ToastNotificationInternal -UpdateCount $count -Config $config
+            $appName = if ($Updates -and $Updates[0]) { $Updates[0].AppName } else { $null }
+            $canDefer = $true
+            $deferralsRemaining = 5
+
+            if ($Updates -and $Updates[0]) {
+                $deferralState = Get-StateFromRegistry -AppId $Updates[0].AppId
+                if ($deferralState) {
+                    $canDefer = $deferralState.CanDefer()
+                    $deferralsRemaining = $deferralState.GetRemainingDeferrals()
+                }
+            }
+
+            # Use native toast with enterprise features
+            Show-NativeToast `
+                -Title $config.Notifications.ToastTitle `
+                -Message "$count update(s) ready to install. Click to proceed." `
+                -AppName $appName `
+                -Scenario $scenario `
+                -DeferralsRemaining $deferralsRemaining `
+                -CanDefer $canDefer
         }
         'Dialog' {
             Show-DeferralDialogFull -Updates $Updates -Config $config -Timeout $Timeout
         }
+        'FullScreen' {
+            # Determine if defer should be allowed based on phase
+            $allowDefer = ($phase -ne [DeferralPhase]::Elapsed) -or ($phase -eq [DeferralPhase]::Elapsed)  # Allow 1hr defer even in elapsed
+            Show-FullScreenPrompt -Updates $Updates -Config $config -Timeout $Timeout -AllowDefer $allowDefer
+        }
         'Both' {
-            Show-ToastNotificationInternal -UpdateCount $count -Config $config
+            $appName = if ($Updates -and $Updates[0]) { $Updates[0].AppName } else { $null }
+            Show-NativeToast `
+                -Title $config.Notifications.ToastTitle `
+                -Message "Updates require your attention" `
+                -AppName $appName `
+                -Scenario $scenario
+
             Start-Sleep -Seconds 2
             Show-DeferralDialogFull -Updates $Updates -Config $config -Timeout $Timeout
         }
@@ -483,6 +852,276 @@ function Show-DeferralDialogFull {
     }
 }
 
+function Show-FullScreenPrompt {
+    <#
+    .SYNOPSIS
+        Shows a full-screen interstitial prompt (RUXIM-style)
+    .DESCRIPTION
+        Displays a maximized, topmost window for critical updates when deferral
+        deadline has elapsed. Replicates Microsoft's Windows 11 upgrade prompt pattern.
+    .PARAMETER Updates
+        Array of pending updates
+    .PARAMETER Config
+        PsPatchMyPC configuration object
+    .PARAMETER Timeout
+        Auto-proceed timeout in seconds
+    .PARAMETER AllowDefer
+        Allow one-hour deferral option (for elapsed phase)
+    .OUTPUTS
+        'Update', 'Defer', or 'Timeout'
+    .EXAMPLE
+        $result = Show-FullScreenPrompt -Updates $updates -Timeout 300
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter()]
+        [PatchStatus[]]$Updates,
+
+        [Parameter()]
+        [PsPatchMyPCConfig]$Config,
+
+        [Parameter()]
+        [int]$Timeout = 300,
+
+        [Parameter()]
+        [bool]$AllowDefer = $false
+    )
+
+    if (-not $Config) { $Config = Get-PatchMyPCConfig }
+
+    # Check if we need to run as user
+    try {
+        $currentUser = [Security.Principal.WindowsIdentity]::GetCurrent()
+        $isSystem = $currentUser.User.Value -eq 'S-1-5-18'
+    }
+    catch { $isSystem = $false }
+
+    if ($isSystem -and (Test-UserSessionActive)) {
+        # Run in user session
+        try {
+            $resultDir = Join-Path $env:PUBLIC 'PsPatchMyPC'
+            if (-not (Test-Path $resultDir)) { New-Item -Path $resultDir -ItemType Directory -Force | Out-Null }
+            $resultFile = Join-Path $resultDir ("fullscreen_prompt_{0}.txt" -f ([guid]::NewGuid().ToString('n')))
+            if (Test-Path $resultFile) { Remove-Item -Path $resultFile -Force -ErrorAction SilentlyContinue }
+
+            $moduleRoot = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
+            $manifest = Join-Path $moduleRoot 'PsPatchMyPC.psd1'
+
+            $sb = [scriptblock]::Create(@"
+Import-Module '$manifest' -Force -ErrorAction SilentlyContinue
+`$cfg = Get-PatchMyPCConfig
+`$choice = Show-FullScreenPrompt -Config `$cfg -Timeout $Timeout -AllowDefer `$$AllowDefer
+Set-Content -Path '$resultFile' -Value `$choice -Encoding ASCII -Force
+"@)
+
+            Invoke-AsCurrentUser -ScriptBlock $sb -Wait | Out-Null
+
+            if (Test-Path $resultFile) {
+                $choice = (Get-Content -Path $resultFile -ErrorAction SilentlyContinue | Select-Object -First 1)
+                Remove-Item -Path $resultFile -Force -ErrorAction SilentlyContinue
+                if ($choice -in @('Update', 'Defer', 'Timeout')) { return $choice }
+            }
+        }
+        catch {
+            Write-PatchLog "Failed to show full-screen prompt in user session: $_" -Type Warning
+        }
+        return 'Timeout'
+    }
+
+    # WPF requires STA thread
+    $currentThread = [System.Threading.Thread]::CurrentThread
+    if ($currentThread.GetApartmentState() -ne 'STA') {
+        $runspace = [runspacefactory]::CreateRunspace()
+        $runspace.ApartmentState = 'STA'
+        $runspace.ThreadOptions = 'ReuseThread'
+        $runspace.Open()
+
+        $ps = [powershell]::Create()
+        $ps.Runspace = $runspace
+
+        $enterpriseConfig = $Config.Notifications.Enterprise
+        $title = if ($enterpriseConfig.FullScreenTitle) { $enterpriseConfig.FullScreenTitle } else { "Action Required" }
+        $message = if ($enterpriseConfig.FullScreenMessage) { $enterpriseConfig.FullScreenMessage } else { "Important updates must be installed now." }
+        $heroImage = $enterpriseConfig.FullScreenHeroImage
+
+        $null = $ps.AddScript({
+            param($Title, $Subtitle, $Message, $AccentColor, $AllowDefer, $Timeout, $HeroImage)
+
+            Add-Type -AssemblyName PresentationFramework -ErrorAction SilentlyContinue
+
+            $xamlParams = @{
+                Title = $Title
+                Subtitle = $Subtitle
+                Headline = "Your device requires attention"
+                Message = $Message
+                AccentColor = $AccentColor
+                ShowDeferButton = $AllowDefer
+                DeferButtonLabel = "Remind me in 1 hour"
+            }
+            if ($HeroImage) { $xamlParams.HeroImagePath = $HeroImage }
+
+            $xaml = Get-FullScreenInterstitialXaml @xamlParams
+
+            [xml]$xamlXml = $xaml
+            $reader = New-Object System.Xml.XmlNodeReader $xamlXml
+            $window = [Windows.Markup.XamlReader]::Load($reader)
+
+            $script:dialogResult = 'Timeout'
+            $script:remainingSeconds = $Timeout
+
+            $countdownText = $window.FindName("CountdownText")
+            $updateButton = $window.FindName("UpdateButton")
+            $deferButton = $window.FindName("DeferButton")
+
+            $timer = New-Object System.Windows.Threading.DispatcherTimer
+            $timer.Interval = [TimeSpan]::FromSeconds(1)
+            $timer.Add_Tick({
+                $script:remainingSeconds--
+                $mins = [Math]::Floor($script:remainingSeconds / 60)
+                $secs = $script:remainingSeconds % 60
+                $countdownText.Text = "{0}:{1:D2}" -f $mins, $secs
+
+                if ($script:remainingSeconds -le 0) {
+                    $timer.Stop()
+                    $script:dialogResult = 'Update'
+                    $window.Close()
+                }
+            })
+
+            if ($updateButton) {
+                $updateButton.Add_Click({
+                    $timer.Stop()
+                    $script:dialogResult = 'Update'
+                    $window.Close()
+                })
+            }
+
+            if ($deferButton -and $AllowDefer) {
+                $deferButton.Add_Click({
+                    $timer.Stop()
+                    $script:dialogResult = 'Defer'
+                    $window.Close()
+                })
+            }
+
+            # Allow Escape to minimize (not close)
+            $window.Add_KeyDown({
+                param($sender, $e)
+                if ($e.Key -eq 'Escape') {
+                    $window.WindowState = 'Minimized'
+                }
+            })
+
+            $window.Add_Loaded({ $timer.Start() })
+            $window.ShowDialog() | Out-Null
+
+            return $script:dialogResult
+        })
+
+        $null = $ps.AddArgument($title)
+        $null = $ps.AddArgument($Config.Notifications.CompanyName)
+        $null = $ps.AddArgument($message)
+        $null = $ps.AddArgument($Config.Notifications.AccentColor)
+        $null = $ps.AddArgument($AllowDefer)
+        $null = $ps.AddArgument($Timeout)
+        $null = $ps.AddArgument($heroImage)
+
+        try {
+            $r = $ps.Invoke()
+            Write-PatchLog "Full-screen prompt result: $($r[0])" -Type Info
+            return $r[0]
+        }
+        finally {
+            $ps.Dispose()
+            $runspace.Close()
+            $runspace.Dispose()
+        }
+    }
+
+    # Already in STA - run directly
+    try {
+        Add-Type -AssemblyName PresentationFramework -ErrorAction SilentlyContinue
+
+        $enterpriseConfig = $Config.Notifications.Enterprise
+        $title = if ($enterpriseConfig.FullScreenTitle) { $enterpriseConfig.FullScreenTitle } else { "Action Required" }
+        $message = if ($enterpriseConfig.FullScreenMessage) { $enterpriseConfig.FullScreenMessage } else { "Important updates must be installed now." }
+
+        $xamlParams = @{
+            Title = $title
+            Subtitle = $Config.Notifications.CompanyName
+            Headline = "Your device requires attention"
+            Message = $message
+            AccentColor = $Config.Notifications.AccentColor
+            ShowDeferButton = $AllowDefer
+            DeferButtonLabel = "Remind me in 1 hour"
+        }
+        if ($enterpriseConfig.FullScreenHeroImage) {
+            $xamlParams.HeroImagePath = $enterpriseConfig.FullScreenHeroImage
+        }
+
+        $xaml = Get-FullScreenInterstitialXaml @xamlParams
+
+        [xml]$xamlXml = $xaml
+        $reader = New-Object System.Xml.XmlNodeReader $xamlXml
+        $window = [Windows.Markup.XamlReader]::Load($reader)
+
+        $script:dialogResult = 'Timeout'
+        $script:remainingSeconds = $Timeout
+
+        $countdownText = $window.FindName("CountdownText")
+        $updateButton = $window.FindName("UpdateButton")
+        $deferButton = $window.FindName("DeferButton")
+
+        $timer = New-Object System.Windows.Threading.DispatcherTimer
+        $timer.Interval = [TimeSpan]::FromSeconds(1)
+        $timer.Add_Tick({
+            $script:remainingSeconds--
+            $mins = [Math]::Floor($script:remainingSeconds / 60)
+            $secs = $script:remainingSeconds % 60
+            $countdownText.Text = "{0}:{1:D2}" -f $mins, $secs
+
+            if ($script:remainingSeconds -le 0) {
+                $timer.Stop()
+                $script:dialogResult = 'Update'
+                $window.Close()
+            }
+        })
+
+        if ($updateButton) {
+            $updateButton.Add_Click({
+                $timer.Stop()
+                $script:dialogResult = 'Update'
+                $window.Close()
+            })
+        }
+
+        if ($deferButton -and $AllowDefer) {
+            $deferButton.Add_Click({
+                $timer.Stop()
+                $script:dialogResult = 'Defer'
+                $window.Close()
+            })
+        }
+
+        $window.Add_KeyDown({
+            param($sender, $e)
+            if ($e.Key -eq 'Escape') {
+                $window.WindowState = 'Minimized'
+            }
+        })
+
+        $window.Add_Loaded({ $timer.Start() })
+        $window.ShowDialog() | Out-Null
+
+        Write-PatchLog "Full-screen prompt result: $script:dialogResult" -Type Info
+        return $script:dialogResult
+    }
+    catch {
+        Write-PatchLog "Failed to show full-screen prompt: $_" -Type Error
+        return 'Timeout'
+    }
+}
+
 function Show-RebootPrompt {
     <#
     .SYNOPSIS
@@ -494,7 +1133,7 @@ function Show-RebootPrompt {
     param(
         [Parameter()]
         [PsPatchMyPCConfig]$Config,
-        
+
         [Parameter()]
         [int]$Timeout = 300
     )
