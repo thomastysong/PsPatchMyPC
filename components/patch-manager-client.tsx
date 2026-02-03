@@ -7,8 +7,8 @@ import { StatusOverview } from "./status-overview"
 import { ApplicationList } from "./application-list"
 import { PatchProgress } from "./patch-progress"
 import { ActivityLog } from "./activity-log"
-import type { PatchStatus, InstallationResult } from "@/lib/types"
-import { generateMockPatchStatus } from "@/lib/mock-data"
+import type { PatchStatus, InstallationResult } from "../lib/types"
+import { generateMockPatchStatus } from "../lib/mock-data"
 
 export type ViewMode = "overview" | "applications" | "progress" | "logs" | "settings"
 

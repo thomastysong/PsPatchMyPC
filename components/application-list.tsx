@@ -2,11 +2,11 @@
 
 import { useState } from "react"
 import { Play, Clock, AlertCircle, CheckCircle, ChevronRight, Search } from "lucide-react"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import type { PatchStatus } from "@/lib/types"
-import { getPriorityColor, getPhaseColor } from "@/lib/mock-data"
-import { cn } from "@/lib/utils"
+import { Button } from "./ui/button"
+import { Input } from "./ui/input"
+import type { PatchStatus } from "../lib/types"
+import { getPriorityColor, getPhaseColor } from "../lib/mock-data"
+import { cn } from "../lib/utils"
 
 interface ApplicationListProps {
   patchStatuses: PatchStatus[]

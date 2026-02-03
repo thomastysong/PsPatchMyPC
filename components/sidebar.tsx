@@ -2,7 +2,7 @@
 
 import { LayoutDashboard, Package, RefreshCw, FileText, Settings, Loader2 } from "lucide-react"
 import type { ViewMode } from "./patch-manager-client"
-import { cn } from "@/lib/utils"
+import { cn } from "../lib/utils"
 
 interface SidebarProps {
   currentView: ViewMode

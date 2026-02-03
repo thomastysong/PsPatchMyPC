@@ -1,9 +1,9 @@
 "use client"
 
 import { RefreshCw, Play, AlertTriangle, CheckCircle, Clock, AlertCircle, Loader2 } from "lucide-react"
-import { Button } from "@/components/ui/button"
-import type { PatchStatus } from "@/lib/types"
-import { getPhaseColor } from "@/lib/mock-data"
+import { Button } from "./ui/button"
+import type { PatchStatus } from "../lib/types"
+import { getPhaseColor } from "../lib/mock-data"
 
 interface StatusOverviewProps {
   patchStatuses: PatchStatus[]

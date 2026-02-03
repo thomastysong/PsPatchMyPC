@@ -1,9 +1,9 @@
 "use client"
 
 import { CheckCircle, XCircle, Loader2, Clock, RotateCw } from "lucide-react"
-import type { PatchStatus, InstallationResult } from "@/lib/types"
-import { cn } from "@/lib/utils"
-import { Progress } from "@/components/ui/progress"
+import type { PatchStatus, InstallationResult } from "../lib/types"
+import { cn } from "../lib/utils"
+import { Progress } from "./ui/progress"
 
 interface PatchProgressProps {
   currentInstall: InstallationResult | null

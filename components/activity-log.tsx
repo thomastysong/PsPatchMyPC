@@ -1,7 +1,7 @@
 "use client"
 
 import { AlertCircle, AlertTriangle, CheckCircle, Info } from "lucide-react"
-import { cn } from "@/lib/utils"
+import { cn } from "../lib/utils"
 
 interface LogEntry {
   id: string
